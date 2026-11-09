@@ -3,6 +3,8 @@ package com.protvirto.redline.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +43,7 @@ import com.protvirto.redline.ui.formatUptime
 import com.protvirto.redline.ui.theme.Mono
 import com.protvirto.redline.ui.theme.Neon
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DashboardScreen(vm: AppViewModel) {
     val status by vm.status.collectAsState()
@@ -68,7 +71,7 @@ fun DashboardScreen(vm: AppViewModel) {
                         color = Neon.Text, fontFamily = Mono, fontWeight = FontWeight.Black, fontSize = 26.sp,
                     )
                     Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         NeonButton(
                             if (s.running_game_name.isNotBlank()) "Jack in" else "Stream desktop",
                             onClick = { vm.play(null) }, filled = true, icon = Icons.Filled.PlayArrow,
@@ -101,7 +104,8 @@ fun DashboardScreen(vm: AppViewModel) {
 
             // ---- power controls -------------------------------------------------
             CyberPanel(title = "Power grid") {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // wraps: five buttons don't fit the column on the Thor (Shut down was cut off, Lock hidden)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val on = reachable == true
                     NeonButton("Wake", onClick = { vm.wake() }, enabled = !on && host.mac.isNotBlank())
                     NeonButton("Sleep", onClick = { confirm = "sleep" }, enabled = on)

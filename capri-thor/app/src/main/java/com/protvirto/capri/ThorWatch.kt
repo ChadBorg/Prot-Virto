@@ -14,6 +14,7 @@ import android.hardware.input.InputManager
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
+import android.os.storage.StorageManager
 import android.util.Log
 import android.util.Xml
 import android.view.InputDevice
@@ -144,7 +145,30 @@ class ThorWatch(private val service: CapriService) {
         .put("plug", lastPlug ?: JSONObject().put("n", plugCount))
 
     // ---- ES-DE ---------------------------------------------------------------------------------
-    private fun esde() = File(service.config.string("esdePath", "/storage/emulated/0/ES-DE"))
+    private var foundEsde: File? = null
+    private var foundEsdeFor: String? = null
+
+    /**
+     * ES-DE's data folder. The configured one if it really is ES-DE's (it has logs/es_log.txt); otherwise
+     * look for an ES-DE folder on every storage volume, because on the Thor it's usually on the SD card
+     * (/storage/XXXX-XXXX/ES-DE) while an empty /storage/emulated/0/ES-DE may also exist.
+     */
+    private fun esde(): File {
+        val configured = File(service.config.string("esdePath", "/storage/emulated/0/ES-DE"))
+        if (File(configured, "logs/es_log.txt").isFile) return configured
+        if (foundEsdeFor == configured.path) foundEsde?.let { return it }
+        val roots = buildList {
+            runCatching {
+                service.getSystemService(StorageManager::class.java).storageVolumes.mapNotNullTo(this) { it.directory }
+            }
+            File("/storage").listFiles()?.filterTo(this) { it.isDirectory && it.name != "self" && it.name != "emulated" }
+        }
+        val found = roots.map { File(it, "ES-DE") }.firstOrNull { File(it, "logs/es_log.txt").isFile }
+        foundEsdeFor = configured.path
+        foundEsde = found
+        if (found != null) Log.i(TAG, "ES-DE folder: $found (configured: $configured)")
+        return found ?: configured
+    }
 
     /** Tails ES-DE's log for the games it launches. */
     private fun pollLog() {

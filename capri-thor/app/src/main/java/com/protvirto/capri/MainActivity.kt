@@ -52,7 +52,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null && wakeFromIntent(intent)) return
         setContent { Screen() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        wakeFromIntent(intent)
+    }
+
+    /**
+     * `adb shell am start -n com.protvirto.capri/.MainActivity --ez wake true` wakes her without a tap
+     * (the service isn't exported, so `am start-foreground-service` from adb is refused). Used by thor-setup.ps1.
+     */
+    private fun wakeFromIntent(intent: Intent?): Boolean {
+        if (intent?.getBooleanExtra("wake", false) != true || !canOverlay()) return false
+        CapriService.start(this)
+        finish()
+        return true
     }
 
     override fun onResume() {

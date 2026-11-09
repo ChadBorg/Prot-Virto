@@ -20,7 +20,8 @@ const MIN = 60 * 1000;
 const STORE = 'capri.thor.day';
 
 const GREETED = 'capri.thor.greeted';
-const GAMEY = new Set(['game', 'emulator', 'stream']);
+// REDLINE counts too: it's PC gaming, and (dualScreen) she gets off the bottom screen its HUD uses
+const GAMEY = new Set(['game', 'emulator', 'stream', 'redline']);
 // battery levels she speaks up at, once per discharge (lowest crossed wins)
 const THRESHOLDS = [30, 20, 15, 10, 5, 2];
 // how mouthy she is (her settings): cooldowns, patience in ES-DE, random banter
@@ -179,8 +180,6 @@ class Thor {
       this.say(`${evt.kind}.open`, { app: evt.label }, { every: 15 * MIN, face: 'aside' });
     } else if (evt.kind === 'store') {
       this.say('store.open', { app: evt.label }, { every: 30 * MIN, face: 'smug' });
-    } else if (evt.kind === 'redline') {
-      this.say('redline.open', {}, { every: 20 * MIN, face: 'laugh', act: 'hop' });
     }
   }
 
@@ -202,12 +201,14 @@ class Thor {
     if (this.session && this.session.pkg === evt.pkg) return;
     const recent = this.launched && Date.now() - this.launched.at < 90 * 1000 ? this.launched : null;
     const name = recent?.game || evt.label;
-    this.session = { name, system: recent?.system || '', pkg: evt.pkg, since: Date.now(), moved: null, stowed: false };
+    this.session = { name, system: recent?.system || '', pkg: evt.pkg, kind: evt.kind, since: Date.now(), moved: null, stowed: false };
     this.day.sessions += 1;
     if (!this.day.games.includes(name)) this.day.games.push(name);
     this.saveDay();
 
-    if (!recent) {
+    if (evt.kind === 'redline') {
+      this.say('redline.open', {}, { every: 20 * MIN, face: 'laugh', act: 'hop', hold: 2400 });
+    } else if (!recent) {
       const key = evt.kind === 'stream' ? 'stream.open' : 'game.start';
       this.say(key, { game: name, app: evt.label }, { face: 'smug', hold: 3000, force: true });
     }
@@ -252,6 +253,8 @@ class Thor {
       if (s.stowed && this.capri.stowed) await this.capri.unstow();
       if (s.moved != null) host.thor('goScreen', s.moved);
       await sleep(900);
+      // a peek at REDLINE's menus isn't "quitting a game": no roast, she just comes back
+      if (s.kind === 'redline' && ms < 3 * MIN) return;
       if (ms < 3 * MIN) {
         this.hops.push(Date.now());
         this.hops = this.hops.filter((t) => Date.now() - t < 20 * MIN);

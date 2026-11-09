@@ -104,7 +104,8 @@ class Apps(private val context: Context) {
             "com.idbg.eden",
         )
         // emulators that use both of the Thor's screens: she gets out of the way entirely
-        val DUAL_SCREEN = listOf("me.magnum.melonds", "com.dsemu.drastic", "org.citra", "io.github.lime3ds", "org.azahar_emu", "io.github.azahar", "info.cemu")
+        // apps that use the bottom screen themselves (REDLINE: its stream HUD + touchpad live there)
+        val DUAL_SCREEN = listOf("com.protvirto.redline", "me.magnum.melonds", "com.dsemu.drastic", "org.citra", "io.github.lime3ds", "org.azahar_emu", "io.github.azahar", "info.cemu")
         val STREAM = listOf(
             "com.limelight", "com.valvesoftware.steamlink", "com.microsoft.xcloud", "com.gamepass", "com.nvidia.geforcenow",
             "com.metallic.chiaki", "io.github.streetpea.chiaki", "com.playstation.remoteplay", "com.parsec.app", "com.artemis",

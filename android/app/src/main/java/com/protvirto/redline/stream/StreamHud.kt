@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -86,23 +88,29 @@ fun StatsOverlay(s: HudStats, modifier: Modifier = Modifier) {
     }
 }
 
+// FlowRow, not Row: on the Thor's bottom screen the HUD column is ~half of 1240 px, and fixed rows pushed
+// Keyboard, the bitrate controls, Close game, Sleep PC and Disconnect off the edge where they couldn't be tapped.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MenuButtons(frameGenOn: Boolean, mouseMode: String, bitrateKbps: Int, a: HudActions, focusFirst: Boolean) {
     val first = remember { FocusRequester() }
     LaunchedEffect(focusFirst) { if (focusFirst) runCatching { first.requestFocus() } }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    val gap = Arrangement.spacedBy(10.dp)
+    Column(verticalArrangement = gap) {
+        FlowRow(horizontalArrangement = gap, verticalArrangement = gap) {
             NeonButton("Resume", onClick = a::resume, filled = true, modifier = Modifier.focusRequester(first))
             NeonButton(if (frameGenOn) "Frame gen: ON" else "Frame gen: OFF", onClick = a::toggleFrameGen)
             NeonButton("Keyboard", onClick = a::openKeyboard)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(horizontalArrangement = gap, verticalArrangement = gap) {
             NeonButton("Touch: $mouseMode", onClick = a::toggleMouseMode)
-            NeonButton("− bitrate", onClick = { a.changeBitrate(-5000) })
-            Text("${bitrateKbps / 1000} Mbps", color = Neon.Text, fontFamily = Mono, fontSize = 13.sp)
-            NeonButton("+ bitrate", onClick = { a.changeBitrate(5000) })
+            Row(horizontalArrangement = gap, verticalAlignment = Alignment.CenterVertically) {
+                NeonButton("−", onClick = { a.changeBitrate(-5000) })
+                Text("${bitrateKbps / 1000} Mbps", color = Neon.Text, fontFamily = Mono, fontSize = 13.sp)
+                NeonButton("+", onClick = { a.changeBitrate(5000) })
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(horizontalArrangement = gap, verticalArrangement = gap) {
             NeonButton("Close game", onClick = a::closeGame)
             NeonButton("Sleep PC", onClick = a::sleepPc)
             NeonButton("Disconnect", onClick = a::disconnect)
