@@ -19,7 +19,8 @@ param(
     [string]$PairCode = "",      # the 6-digit code shown with it
     [string]$Connect = "",       # the IP:port at the top of the Wireless debugging screen
     [switch]$SkipAgent,
-    [switch]$SkipApks
+    [switch]$SkipApks,
+    [switch]$Reinstall           # uninstall the apps first (needed once when the signing key changed; loses app data)
 )
 # Continue, not Stop: Windows PowerShell 5.1 turns any stderr from adb/gh/git into a fatal error
 $ErrorActionPreference = "Continue"
@@ -159,8 +160,18 @@ if (-not $SkipApks) {
     Step "Installing REDLINE and Capri on the Thor"
     $red = Get-ChildItem (Join-Path $apkDir "redline") -Filter *.apk | Select-Object -First 1
     $cap = Get-ChildItem (Join-Path $apkDir "capri") -Filter *.apk | Select-Object -First 1
-    adb install -r $red.FullName
-    adb install -r $cap.FullName
+    foreach ($app in @(@{ apk = $red; pkg = "com.protvirto.redline"; name = "REDLINE" },
+                       @{ apk = $cap; pkg = "com.protvirto.capri"; name = "Capri" })) {
+        if ($Reinstall) { adb uninstall $app.pkg 2>&1 | Out-Null }
+        $out = (adb install -r $app.apk.FullName 2>&1 | ForEach-Object { "$_" }) -join " "
+        if ($out -match "Success") { Note "$($app.name) installed" }
+        elseif ($out -match "UPDATE_INCOMPATIBLE|signatures do not match") {
+            # builds without the REDLINE_KEYSTORE_B64 secret are signed with a throwaway key, so they can't
+            # update each other; uninstalling loses the app's data (REDLINE pairing, Capri's settings)
+            Write-Host "   $($app.name): the installed copy was signed with a different key, so Android won't update it." -ForegroundColor Yellow
+            Write-Host "   Run this again with -Reinstall to uninstall it first (you'll pair REDLINE again)." -ForegroundColor Yellow
+        } else { Write-Host "   $($app.name) didn't install: $out" -ForegroundColor Yellow }
+    }
 }
 
 Step "Giving Capri her permissions"
@@ -172,7 +183,7 @@ adb shell pm grant $p android.permission.POST_NOTIFICATIONS *> $null
 adb shell dumpsys deviceidle whitelist +$p | Out-Null
 Note "overlay, usage access, all files, notifications, no battery limits: granted"
 # CapriService isn't exported, so adb can't start it directly: ask her app to wake her
-adb shell am start -n "$p/.MainActivity" --ez wake true | Out-Null
+adb shell am start -n "$p/.MainActivity" --ez wake true 2>&1 | Out-Null
 Start-Sleep 3
 if ((adb shell dumpsys activity services $p) -match "CapriService") { Note "Capri is awake (bottom screen)" }
 else { Write-Host "   Capri didn't start by herself: open the Capri app on the Thor and tap WAKE HER UP." -ForegroundColor Yellow }
