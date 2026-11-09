@@ -24,7 +24,8 @@ jobs:
       - name: Decode signing key (optional)
         if: ${{ env.KEYSTORE_B64 != '' }}
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/redline.jks"
+          # tolerate line breaks / CRs in the secret (Windows tools add them when piping it to gh)
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/redline.jks"
           echo "REDLINE_KEYSTORE=$RUNNER_TEMP/redline.jks" >> "$GITHUB_ENV"
       - name: Build release APK
         env:
@@ -59,7 +60,8 @@ jobs:
       - name: Decode signing key (optional)
         if: ${{ env.KEYSTORE_B64 != '' }}
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/redline.jks"
+          # tolerate line breaks / CRs in the secret (Windows tools add them when piping it to gh)
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/redline.jks"
           echo "REDLINE_KEYSTORE=$RUNNER_TEMP/redline.jks" >> "$GITHUB_ENV"
       - name: Build release APK
         env:
