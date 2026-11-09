@@ -1,0 +1,64 @@
+name: Build REDLINE
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.REDLINE_KEYSTORE_B64 }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Decode signing key (optional)
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/redline.jks"
+          echo "REDLINE_KEYSTORE=$RUNNER_TEMP/redline.jks" >> "$GITHUB_ENV"
+      - name: Build release APK
+        env:
+          REDLINE_KEYSTORE_PASSWORD: ${{ secrets.REDLINE_KEYSTORE_PASSWORD }}
+          REDLINE_KEY_ALIAS: ${{ secrets.REDLINE_KEY_ALIAS }}
+          REDLINE_KEY_PASSWORD: ${{ secrets.REDLINE_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: REDLINE-apk
+          path: android/app/build/outputs/apk/release/*.apk
+
+  agent:
+    name: PC agent tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: host-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install aiohttp psutil pytest
+      - run: python -m pytest -q tests
+      - name: Package agent
+        run: |
+          mkdir -p dist/REDLINE-Agent
+          cp -r redline redline_agent.py requirements.txt install.ps1 start-agent.bat dist/REDLINE-Agent/
+          cd dist && zip -r REDLINE-Agent.zip REDLINE-Agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: REDLINE-Agent
+          path: host-agent/dist/REDLINE-Agent.zip

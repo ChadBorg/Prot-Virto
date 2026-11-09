@@ -1,0 +1,7 @@
+aiohttp>=3.9
+psutil>=5.9
+# Virtual Xbox controller (needs the ViGEmBus driver, which the vgamepad installer offers)
+vgamepad>=0.1.0; sys_platform == "win32"
+# Game audio (WASAPI loopback)
+soundcard>=0.4.3; sys_platform == "win32"
+numpy>=1.26; sys_platform == "win32"

@@ -1,0 +1,14 @@
+<resources>
+    <style name="Theme.Redline" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/redline_black</item>
+        <item name="android:statusBarColor">@color/redline_black</item>
+        <item name="android:navigationBarColor">@color/redline_black</item>
+        <item name="android:colorAccent">@color/redline_red</item>
+    </style>
+
+    <style name="Theme.Redline.Fullscreen">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

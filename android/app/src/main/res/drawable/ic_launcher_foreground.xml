@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Angular "R" with a speed slash: REDLINE -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF1E3C"
+        android:pathData="M36,30h28l8,8v12l-6,6l9,22h-10l-8,-20h-11v20h-10z M46,39v12h15l3,-3v-6l-3,-3z" />
+    <path android:fillColor="#FF1E3C" android:fillAlpha="0.55"
+        android:pathData="M28,72h8l-4,6h-8z M18,72h6l-4,6h-6z" />
+</vector>

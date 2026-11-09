@@ -1,0 +1,8 @@
+PAIRING-PIN.txt
+redline_config.json
+redline_agent.log
+ffmpeg.exe
+.venv/
+__pycache__/
+dist/
+.pytest_cache/
