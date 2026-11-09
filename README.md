@@ -5,6 +5,18 @@ This repo holds two apps for the AYN Thor:
 * **REDLINE** (below): stream your gaming PC to the Thor from anywhere.
 * **[Capri for Thor](capri-thor/README.md)**: the Capri desktop companion ported to the Thor. She starts on boot, lives on the bottom screen, and roasts your ES-DE habits.
 
+### One-shot setup (Windows PC + Thor over Wi-Fi ADB)
+
+In PowerShell on the PC:
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+irm https://raw.githubusercontent.com/ChadBorg/Prot-Virto/claude/awesome-planck-4vam9a/tools/thor-setup.ps1 -OutFile thor-setup.ps1
+.\thor-setup.ps1
+```
+It installs adb, Git, GitHub CLI and Python, downloads the latest APKs, pairs with the Thor, installs both apps,
+grants Capri's permissions, installs and starts the REDLINE agent, then prints a health report
+(`tools/thor-check.ps1`, which you can re-run any time).
+
 ---
 
 # REDLINE
