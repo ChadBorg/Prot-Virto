@@ -126,6 +126,28 @@ class CapriService : Service() {
         override fun onDisplayChanged(displayId: Int) {}
     }
 
+    /** What she'd say on screen, as a heads-up notification when she can't be seen (a game on your only screen). */
+    fun alert(text: String) {
+        if (text.isBlank()) return
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(ALERTS, "Capri says", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Battery warnings and the like, when she's put away"
+            }
+        )
+        nm.notify(
+            ALERT_ID,
+            Notification.Builder(this, ALERTS)
+                .setSmallIcon(R.drawable.ic_tile)
+                .setContentTitle("Capri")
+                .setContentText(text)
+                .setStyle(Notification.BigTextStyle().bigText(text))
+                .setAutoCancel(true)
+                .setTimeoutAfter(20_000)
+                .build(),
+        )
+    }
+
     fun openMenu() {
         startActivity(Intent(this, MenuActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
     }
@@ -166,6 +188,8 @@ class CapriService : Service() {
     companion object {
         private const val CHANNEL = "capri"
         private const val NOTE_ID = 77
+        private const val ALERTS = "capri_alerts"
+        private const val ALERT_ID = 78
         const val ACTION_QUIT = "capri.QUIT"
         const val ACTION_TOGGLE = "capri.TOGGLE"
         const val ACTION_COMMAND = "capri.COMMAND"

@@ -189,6 +189,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            Plate("Her attitude", font) {
+                Choice(
+                    "Sass level", listOf("chill" to "Chill", "normal" to "Normal", "unhinged" to "Unhinged"),
+                    cfg.optString("sass", "normal"), font,
+                ) { save(JSONObject().put("sass", it)) }
+                Check("Quiet hours (23:00–08:00)", "No commentary at night — only what you ask for and a dying battery", cfg.optBoolean("quietHours", false), font) {
+                    save(JSONObject().put("quietHours", it))
+                }
+                Check("Battery warnings", "30%, 20%, 15%… and a nag every so often under 15%. A notification if she's put away mid-game.", cfg.optBoolean("batteryWarn", true), font) {
+                    save(JSONObject().put("batteryWarn", it))
+                }
+                Check("Shake reactions", "Shake the Thor and she gets dizzy (shake it too much and she gets mad)", cfg.optBoolean("shake", true), font) {
+                    save(JSONObject().put("shake", it))
+                }
+            }
+
             Plate("ES-DE", font) {
                 Field("ES-DE folder (holds logs/ and gamelists/)", cfg.optString("esdePath"), font) {
                     save(JSONObject().put("esdePath", it.trim()))

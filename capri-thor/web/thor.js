@@ -7,9 +7,10 @@
 //   { type: 'launch', game, system }             ES-DE launched a game (read off its log)
 //   { type: 'library', total, played, never, favorites, favNever, lastPlayedAt, top, picks }
 //   { type: 'screen', on, offFor }               the screen went off / came back on
-//   { type: 'power', level, charging }           the battery
+//   { type: 'power', level, charging, chargeMs } the battery (chargeMs: Android's guess to full)
 //   { type: 'thermal', level }                   0 (cool) .. 6 (shutdown)
 //   { type: 'display', current, count, top }     which screen she's on, how many there are
+//   { type: 'shake' }                            you shook the Thor (she noticed)
 
 import { pick, fmt } from './util.js';
 import { LINES } from './thor-lines.js';
@@ -18,7 +19,16 @@ const host = window.host;
 const MIN = 60 * 1000;
 const STORE = 'capri.thor.day';
 
+const GREETED = 'capri.thor.greeted';
 const GAMEY = new Set(['game', 'emulator', 'stream']);
+// battery levels she speaks up at, once per discharge (lowest crossed wins)
+const THRESHOLDS = [30, 20, 15, 10, 5, 2];
+// how mouthy she is (her settings): cooldowns, patience in ES-DE, random banter
+const SASS = {
+  chill: { every: 2.5, scroll: 1.6, banter: 0.3 },
+  normal: { every: 1, scroll: 1, banter: 1 },
+  unhinged: { every: 0.5, scroll: 0.6, banter: 2.2 },
+};
 const today = () => new Date().toDateString();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,12 +55,20 @@ class Thor {
     this.hops = [];         // short sessions lately (commitment issues)
     this.day = this.loadDay();
     this.quietUntil = 0;
+    this.cfg = {};
+    this.batt = null;       // { pct, charging, samples: [[t, pct]], warned: [], full, nagAt }
+    this.shakes = [];
+    host.getConfig().then((c) => { if (c) this.cfg = c; });
+    host.onConfig((c) => { if (c) this.cfg = c; });
+    // the battery is hers now: pc.js would say it twice (and wrongly as she starts)
+    this.pc.battery = () => {};
 
     host.onThor((evt) => evt && this.on(evt));
     // from her menu on the Thor (MenuActivity)
     host.onCommand((cmd) => {
       if (cmd?.name === 'thorPick') this.suggest(true);
       else if (cmd?.name === 'thorStats') this.stats();
+      else if (cmd?.name === 'thorBattery') this.batteryCheck();
     });
     this.patchChat();
     setInterval(() => this.tick(), 30 * 1000);
@@ -85,23 +103,42 @@ class Thor {
     return LINES;
   }
 
+  get sass() {
+    return SASS[this.cfg.sass] || SASS.normal;
+  }
+
+  // quiet hours (her settings): 23:00-08:00, only what you asked for and a dying battery
+  quietNow() {
+    if (!this.cfg.quietHours) return false;
+    const h = new Date().getHours();
+    return h >= 23 || h < 8;
+  }
+
+  // a line from thor-lines.js by its dotted key, filled in
+  line(key, vars = {}) {
+    const lines = key.split('.').reduce((o, k) => o?.[k], this.t);
+    if (!lines?.length) return '';
+    return fmt(pick(lines), { name: this.brain.custom?.userName || 'choom', ...vars });
+  }
+
   // not in the middle of something that matters more, not put away, not mid-game
   get free() {
     const c = this.capri;
     return !this.chat.open && !this.guide.running && c.mode !== 'alert' && !c.stowed && !c.dormant;
   }
 
-  // once per `every` ms per key, if she's free (or `force`)
-  say(key, vars = {}, { face = 'smug', hold = 5200, every = 0, force = false, act = null, actions = null, onAction = null } = {}) {
+  // once per `every` ms per key (stretched by her sass), if she's free (or `force`). `urgent`:
+  // you asked, or it can't wait (quiet hours don't apply)
+  say(key, vars = {}, { face = 'smug', hold = 5200, every = 0, force = false, urgent = false, act = null, actions = null, onAction = null } = {}) {
     const now = Date.now();
-    if (every && now - (this.said[key] || 0) < every) return false;
-    if (!force && (!this.free || now < this.quietUntil)) return false;
-    const lines = key.split('.').reduce((o, k) => o?.[k], this.t);
-    if (!lines?.length) return false;
+    if (!urgent && this.quietNow()) return false;
+    if (every && now - (this.said[key] || 0) < every * (urgent ? 1 : this.sass.every)) return false;
+    if (!force && !urgent && (!this.free || now < this.quietUntil)) return false;
+    const text = this.line(key, vars);
+    if (!text) return false;
     this.said[key] = now;
-    const name = this.brain.custom?.userName || 'choom';
     this.capri.wake();
-    const shown = this.panel.say({ kind: 'info', face, line: fmt(pick(lines), { name, ...vars }), hold, ...(actions && { actions, onAction }) });
+    const shown = this.panel.say({ kind: 'info', face, line: text, hold, ...(actions && { actions, onAction }) });
     if (shown !== false && act && this.capri.free) this.capri.perform(act);
     return shown !== false;
   }
@@ -114,7 +151,8 @@ class Thor {
       case 'launch': return this.onLaunch(evt);
       case 'library': return this.onLibrary(evt);
       case 'screen': return this.onScreen(evt);
-      case 'power': return this.pc.battery?.({ level: evt.level, charging: evt.charging });
+      case 'power': return this.onPower(evt);
+      case 'shake': return this.onShake();
       case 'thermal': return this.onThermal(evt);
       case 'display': this.display = { ...this.display, ...evt }; return null;
       case 'say': return this.say(evt.key, evt.vars || {}, { force: true });
@@ -255,10 +293,147 @@ class Thor {
     setTimeout(() => {
       if (offFor > 4 * 60 * MIN && days >= 2) {
         this.say('away.days', { days }, { face: 'aside', every: 4 * 60 * MIN, act: 'huff' });
-      } else if (offFor > 3 * 60 * MIN) {
+      } else if (!this.greet() && offFor > 3 * 60 * MIN) {
         this.say('away.hello', {}, { face: 'laugh', every: 2 * 60 * MIN, act: 'hop' });
       }
     }, 2500);
+  }
+
+  // the first time you pick the Thor up each day: good morning (or whatever time it is)
+  greet() {
+    let last = null;
+    try {
+      last = localStorage.getItem(GREETED);
+    } catch {
+      // no memory: she greets you again, no harm
+    }
+    if (last === today()) return false;
+    const h = new Date().getHours();
+    const key = h >= 5 && h < 12 ? 'greet.morning' : h >= 12 && h < 18 ? 'greet.afternoon' : h >= 18 && h < 23 ? 'greet.evening' : 'greet.night';
+    const shown = this.say(key, {}, { face: 'laugh', force: true, act: 'hop' });
+    if (shown) {
+      try {
+        localStorage.setItem(GREETED, today());
+      } catch {
+        // see above
+      }
+    }
+    return shown;
+  }
+
+  // ---- the battery --------------------------------------------------------------------------
+  onPower({ level, charging, chargeMs = 0 }) {
+    const pct = Math.round(level * 100);
+    const now = Date.now();
+    const b = this.batt;
+    if (!b) {
+      // how it is when she starts: nothing to say about that
+      this.batt = { pct, charging, samples: charging ? [] : [[now, pct]], warned: THRESHOLDS.filter((s) => pct <= s), full: pct >= 100, nagAt: now };
+      return;
+    }
+    const plugged = charging !== b.charging;
+    b.pct = pct;
+    b.charging = charging;
+    if (this.cfg.batteryWarn === false) return;
+    if (plugged) {
+      b.samples = charging ? [] : [[now, pct]];
+      if (charging) {
+        const low = b.warned.some((s) => s <= 15);
+        b.warned = [];
+        b.full = false;
+        const mins = chargeMs > 0 ? Math.round(chargeMs / MIN) : 0;
+        const full = mins ? (mins >= 90 ? `${(mins / 60).toFixed(1)} hours` : `${mins} minutes`) : 'a bit';
+        if (this.say(low ? 'battery.saved' : 'battery.plugged', { pct, full }, { face: 'laugh', every: MIN, force: true }) && this.capri.free) {
+          this.capri.recharge?.();
+        }
+      } else {
+        this.say('battery.unplugged', { pct }, { face: 'aside', every: MIN });
+      }
+      return;
+    }
+    if (charging) {
+      if (pct >= 100 && !b.full) {
+        b.full = true;
+        this.say('battery.full', {}, { face: 'smug', every: 30 * MIN });
+      }
+      return;
+    }
+    b.samples.push([now, pct]);
+    b.samples = b.samples.filter(([t]) => now - t < 40 * MIN);
+    const crossed = THRESHOLDS.filter((s) => pct <= s && !b.warned.includes(s));
+    if (!crossed.length) return;
+    b.warned.push(...crossed);
+    this.warnBattery(Math.min(...crossed), `battery.low${Math.min(...crossed)}`);
+  }
+
+  // % per minute over the last while, once there's enough to tell
+  drainRate() {
+    const s = this.batt?.samples || [];
+    if (s.length < 2) return 0;
+    const [t0, p0] = s[0];
+    const [t1, p1] = s[s.length - 1];
+    if (t1 - t0 < 8 * MIN || p0 <= p1) return 0;
+    return (p0 - p1) / ((t1 - t0) / MIN);
+  }
+
+  eta(fallback = 'not long') {
+    const r = this.drainRate();
+    if (!r || !this.batt) return fallback;
+    const m = Math.round(this.batt.pct / r);
+    return m >= 90 ? `about ${(m / 60).toFixed(1)} hours` : `about ${Math.max(1, m)} minutes`;
+  }
+
+  // On screen if she can be seen; put away (a game on the only screen), a notification instead.
+  warnBattery(step, key) {
+    const b = this.batt;
+    b.nagAt = Date.now();
+    const vars = { pct: b.pct, eta: this.eta(), game: this.session?.name || 'whatever this is' };
+    const urgent = step <= 10;
+    if (!this.capri.stowed) {
+      const shown = this.say(key, vars, { face: step <= 5 ? 'wide' : step <= 15 ? 'aside' : 'smug', hold: 7000, force: step <= 20, urgent });
+      if (shown && step <= 10 && this.capri.free) this.capri.drain?.();
+      if (shown) return;
+    }
+    if (step <= 15 && (urgent || !this.quietNow())) host.thor('notify', this.line(key, vars));
+  }
+
+  // under 15% and still not plugged in: she brings it up again now and then
+  batteryNag(now) {
+    const b = this.batt;
+    if (!b || b.charging || b.pct > 15 || this.cfg.batteryWarn === false) return;
+    if (now - b.nagAt < 15 * MIN * this.sass.every) return;
+    this.warnBattery(b.pct <= 10 ? 10 : 15, 'battery.nag');
+  }
+
+  // "Battery check" in her menu
+  batteryCheck() {
+    const b = this.batt;
+    if (!b) return this.say('battery.unknown', {}, { face: 'aside', urgent: true });
+    if (b.charging) return this.say('battery.checkCharging', { pct: b.pct }, { face: 'smug', urgent: true, hold: 6000 });
+    const rate = this.drainRate();
+    return this.say('battery.check', {
+      pct: b.pct, eta: this.eta('hard to say yet'), rate: rate ? `${Math.round(rate * 60)}% an hour` : 'not sure yet',
+    }, { face: b.pct <= 20 ? 'aside' : 'smug', urgent: true, hold: 7000 });
+  }
+
+  // ---- shaking the Thor -------------------------------------------------------------------------
+  onShake() {
+    if (this.session || this.capri.dragging || this.capri.stowed || this.chat.open || this.cfg.shake === false) return;
+    const now = Date.now();
+    this.shakes = this.shakes.filter((t) => now - t < 2 * MIN);
+    this.shakes.push(now);
+    this.capri.wake();
+    if (this.capri.free) this.capri.perform('shake');
+    if (this.shakes.length >= 3) {
+      this.shakes = [];
+      this.say('shake.angry', {}, { face: 'many', urgent: true });
+      this.bond?.lose?.(1);
+      this.bond?.feel?.('angry');
+    } else {
+      const again = this.shakes.length === 2;
+      this.say(again ? 'shake.again' : 'shake.first', {}, { face: again ? 'aside' : 'wide', urgent: true });
+      this.bond?.feel?.('dizzy');
+    }
   }
 
   onThermal({ level }) {
@@ -271,13 +446,16 @@ class Thor {
   tick() {
     this.rollDay();
     const now = Date.now();
+    this.batteryNag(now);
+    if (this.session) return this.sessionTick(now);
     const app = this.app;
-    if (!app || this.session) return;
+    if (!app) return;
     const there = now - app.since;
 
     // scrolling through ES-DE without picking anything
     if (app.kind === 'esde') {
-      const steps = [[6, 'scroll.one'], [12, 'scroll.two'], [20, 'scroll.three'], [35, 'scroll.four']];
+      const k = this.sass.scroll;
+      const steps = [[6, 'scroll.one'], [12, 'scroll.two'], [20, 'scroll.three'], [35, 'scroll.four']].map(([m, key]) => [Math.round(m * k), key]);
       const level = steps.filter(([m]) => there >= m * MIN).length - 1; // the last step passed
       if (level >= 0 && level >= (this.scrollWarned || 0)) {
         const [m, key] = steps[level];
@@ -305,8 +483,29 @@ class Thor {
       }
     }
 
+    // way past bedtime
+    if (hour >= 1 && hour < 5 && there < 20 * MIN) this.say('late.idle', {}, { face: 'aside', every: 3 * 60 * MIN });
+
     // and now and then, just because
-    if (Math.random() < 0.035) this.banter();
+    if (Math.random() < 0.035 * this.sass.banter) this.banter();
+  }
+
+  // during a game she's quiet, but from the other screen she still keeps an eye on you
+  sessionTick(now) {
+    const s = this.session;
+    if (this.capri.stowed) return; // put away on your only screen: not a peep
+    const ms = now - s.since;
+    const hour = new Date().getHours();
+    if (!s.lateSaid && hour >= 1 && hour < 5 && ms > 10 * MIN) {
+      s.lateSaid = this.say('late.game', { game: s.name }, { face: 'look', force: true, every: 2 * 60 * MIN });
+    }
+    if (!s.longSaid && ms > 120 * MIN) {
+      s.longSaid = this.say('game.long', { game: s.name, hours: Math.floor(ms / (60 * MIN)) }, { face: 'laugh', force: true });
+    }
+    const perHour = this.drainRate() * 60;
+    if (!s.hungrySaid && perHour > 30 && ms > 10 * MIN && !this.batt?.charging) {
+      s.hungrySaid = this.say('battery.hungry', { game: s.name, rate: Math.round(perHour), eta: this.eta() }, { face: 'wide', force: true });
+    }
   }
 
   banter() {
@@ -326,12 +525,12 @@ class Thor {
   suggest(asked = false) {
     const picks = this.library?.picks || [];
     if (!picks.length) {
-      if (asked) this.say('noLibrary', {}, { face: 'aside', force: true });
+      if (asked) this.say('noLibrary', {}, { face: 'aside', urgent: true });
       return;
     }
     const g = pick(picks);
     this.say('suggest', { game: g.name, system: prettySystem(g.system) }, {
-      face: 'laugh', hold: 9000, force: true, act: 'curious',
+      face: 'laugh', hold: 9000, urgent: true, act: 'curious',
     });
   }
 
@@ -344,7 +543,7 @@ class Thor {
     this.say(key, {
       min, sessions: d.sessions, scroll: Math.round(d.esdeMs / MIN),
       games: d.games.slice(-3).join(', ') || 'nothing',
-    }, { face: min === 0 ? 'many' : 'laugh', hold: 8000, force: true });
+    }, { face: min === 0 ? 'many' : 'laugh', hold: 8000, urgent: true });
   }
 
   // ---- her chat knows she lives in a Thor now --------------------------------------------------
@@ -370,6 +569,7 @@ class Thor {
       'Tease the user about procrastination and their gaming habits now and then (scrolling the library instead of playing, never finishing anything, huge backlog), playfully, never mean.',
       `Today on the Thor: ${Math.round(d.playMs / MIN)} minutes of games over ${d.sessions} session(s)${d.games.length ? ` (${d.games.slice(-5).join(', ')})` : ''}, ${Math.round(d.esdeMs / MIN)} minutes browsing ES-DE.`,
     ];
+    if (this.batt) parts.push(`The Thor's battery: ${this.batt.pct}%${this.batt.charging ? ', charging' : `, on battery (${this.eta('unknown time')} left)`}.`);
     if (this.session) parts.push(`Right now they are playing ${this.session.name}.`);
     else if (this.app) parts.push(`Right now the app in front is ${this.app.label}.`);
     if (lib) {

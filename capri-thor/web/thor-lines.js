@@ -67,6 +67,10 @@ export const LINES = {
       'Back from {game}. {min} minutes. Respectable. Barely.',
       'That\'s {min} minutes on {game}. Proud of you. Don\'t let it go to your head.',
     ],
+    long: [
+      '{hours} hours of {game}. Blink. Stretch. Drink something. Then carry on.',
+      '{hours} hours straight. Your thumbs are filing a complaint.',
+    ],
     marathon: [
       '{min} minutes of {game}! Okay, legend. Now drink some water.',
       'You went full feral on {game}. {min} minutes. Stretch your hands before they fuse to the sticks.',
@@ -180,6 +184,116 @@ export const LINES = {
     '{hours} hour(s) of games today. Okay, I take back half the things I said.',
     'Look at you, actually playing your games. Character development.',
   ],
+
+  battery: {
+    plugged: [
+      'Ooh, juice. Charging at {pct}%. Full in {full}.',
+      'Plugged in. I can feel the electrons, {name}. Tingly.',
+      'Charger connected. {pct}% and climbing. Full in {full}.',
+    ],
+    saved: [
+      'You plugged it in! At {pct}%! You absolute cliffhanger.',
+      'Saved by the cable. That was too close, {name}.',
+    ],
+    unplugged: [
+      'Unplugged at {pct}%. We\'re running on battery now. Live dangerously.',
+      'Cord\'s off. {pct}%. Let\'s see how long you last.',
+    ],
+    full: [
+      '100%. Full tank. You can unplug me now, I\'m not a phone you forget on the nightstand.',
+      'Fully charged. No excuses left. Go play something.',
+    ],
+    low30: [
+      'Battery\'s at {pct}%. Not panicking. Just… mentioning it.',
+      '{pct}% left. Plenty for a boss fight. Maybe not two.',
+    ],
+    low20: [
+      '{pct}% battery, {name}. Might want to know where the charger is.',
+      'Twenty-ish percent. I\'m starting to feel a little light-headed.',
+    ],
+    low15: [
+      '{pct}% and dropping, {eta} left at this rate. Charger. Now-ish.',
+      'Battery\'s at {pct}%. I give it {eta}. Plug me in, choom.',
+    ],
+    low10: [
+      '{pct}%! I\'m flickering over here, {eta} left. CHARGER.',
+      'Single digits are coming, {name}. {pct}%. Save your game.',
+      '{pct}% battery. Save your progress in {game} before I faint.',
+    ],
+    low5: [
+      '{pct}%. I can see the light. It\'s red. PLUG. ME. IN.',
+      'SAVE YOUR GAME. {pct}% LEFT. I\'M NOT JOKING THIS TIME.',
+    ],
+    low2: [
+      '{pct}%… tell the satellite… I loved it…',
+      'This is it. {pct}%. If I flatline, it\'s on you.',
+    ],
+    nag: [
+      'Still {pct}%. Still not charging. I\'ve noticed: {eta} left.',
+      'Friendly reminder from the dying construct: {pct}%, {eta} left.',
+      'The charger misses you. So do I, at {pct}%.',
+    ],
+    hungry: [
+      '{game} is eating {rate}% battery an hour, {eta} left at this pace.',
+      'Heads up: {game} drinks {rate}% an hour. Thirsty game.',
+    ],
+    check: [
+      '{pct}% left, draining {rate}. That\'s {eta}.',
+      'Battery: {pct}%. Drain: {rate}. Time left: {eta}. You\'re welcome.',
+    ],
+    checkCharging: [
+      '{pct}% and charging. Go on, you\'ve got time.',
+    ],
+    unknown: [
+      'I haven\'t felt the battery yet. Give me a minute.',
+    ],
+  },
+
+  shake: {
+    first: [
+      'WHOA. Earthquake?! Oh. It\'s you.',
+      'Hey! I\'m made of data, not maracas!',
+      'Did you just… shake me? Rude.',
+    ],
+    again: [
+      'Again?! My mane\'s getting tangled.',
+      'Stop shaking me, I\'m getting dizzy. Data dizzy. It\'s a thing.',
+    ],
+    angry: [
+      'THAT\'S IT. Shake me one more time and I\'m rating every game you own 1 star.',
+      'Okay. We\'re fighting now. Don\'t talk to me.',
+    ],
+  },
+
+  late: {
+    idle: [
+      'It\'s past 1am, {name}. Even the satellite is asleep.',
+      'Late night again? Either play something or go to bed. Pick one.',
+    ],
+    game: [
+      'Still playing {game} at this hour? Respect. Also: sleep exists.',
+      '{game} at 2am. Classic. Just one more level, right?',
+    ],
+  },
+
+  greet: {
+    morning: [
+      'Morning, {name}. Today\'s goal: launch one game. Just one.',
+      'Good morning! I dreamed about your backlog. It was a nightmare.',
+    ],
+    afternoon: [
+      'Afternoon, {name}. The Thor missed you. I didn\'t. Okay, a little.',
+      'Hey, you\'re here. Perfect time for a quick game, right?',
+    ],
+    evening: [
+      'Evening, {name}. Prime gaming hours. Let\'s not waste them scrolling.',
+      'Evening! Pick something good tonight.',
+    ],
+    night: [
+      'Oh, a night owl. Let\'s make it count.',
+      'Late session? I\'m in.',
+    ],
+  },
 
   noLibrary: [
     'I can\'t see your ES-DE library yet. Give me "All files access" in the Capri app and I\'ll judge it properly.',

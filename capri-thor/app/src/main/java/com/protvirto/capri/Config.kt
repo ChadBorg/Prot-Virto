@@ -27,7 +27,8 @@ class Config(context: Context) {
           "watchScreen": false, "lookAsked": false, "breaks": true, "setups": {}, "gameClose": [], "gameMode": null,
 
           "startOnBoot": true, "screen": "bottom", "esdePath": "/storage/emulated/0/ES-DE",
-          "ollamaUrl": "http://127.0.0.1:11434", "nagLevel": "normal", "running": true
+          "ollamaUrl": "http://127.0.0.1:11434", "running": true,
+          "sass": "normal", "quietHours": false, "batteryWarn": true, "shake": true
         }
         """.trimIndent()
     )

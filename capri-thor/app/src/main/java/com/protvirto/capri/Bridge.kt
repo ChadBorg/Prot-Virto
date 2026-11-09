@@ -59,6 +59,7 @@ class Bridge(private val service: CapriService) {
         }
         "focusOverlay" -> { service.main.post { service.overlay?.setFocus(a.optBoolean(0)) }; null }
         "thorReady" -> { service.watch?.replay(); service.displayChanged(); true }
+        "notify" -> { service.alert(a.optString(0)); true }
         "cpu" -> null // Android keeps /proc/stat to itself: the heat comes from the thermal status instead
         "idle" -> (SystemClock.elapsedRealtime() - (service.watch?.lastActive ?: SystemClock.elapsedRealtime())) / 1000
         "pcDo" -> JSONObject().put("ok", false).put("error", "On the Thor, Android handles that one itself.")

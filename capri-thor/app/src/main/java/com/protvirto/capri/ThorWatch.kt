@@ -6,6 +6,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.hardware.input.InputManager
 import android.os.BatteryManager
 import android.os.PowerManager
@@ -22,6 +26,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.math.sqrt
 
 /**
  * Her senses on the Thor (windows.ps1's job on the PC): the app in front, ES-DE's log (which game
@@ -58,6 +63,7 @@ class ThorWatch(private val service: CapriService) {
             service.thor(JSONObject().put("type", "thermal").put("level", status))
         }
         service.getSystemService(InputManager::class.java)?.registerInputDeviceListener(inputListener, service.main)
+        listenShake(true)
     }
 
     fun stop() {
@@ -65,6 +71,7 @@ class ThorWatch(private val service: CapriService) {
         runCatching { service.unregisterReceiver(screenReceiver) }
         runCatching { service.unregisterReceiver(batteryReceiver) }
         runCatching { service.getSystemService(InputManager::class.java)?.unregisterInputDeviceListener(inputListener) }
+        listenShake(false)
     }
 
     /** Everything she knows, again (her renderer just (re)loaded). */
@@ -257,10 +264,12 @@ class ThorWatch(private val service: CapriService) {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_SCREEN_OFF -> {
+                    listenShake(false)
                     screenOffAt = SystemClock.elapsedRealtime()
                     service.thor(JSONObject().put("type", "screen").put("on", false))
                 }
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
+                    listenShake(true)
                     if (screenOffAt == 0L) return
                     val off = SystemClock.elapsedRealtime() - screenOffAt
                     screenOffAt = 0L
@@ -285,7 +294,52 @@ class ThorWatch(private val service: CapriService) {
     }
 
     private fun emitPower(pct: Int, charging: Boolean) {
-        service.thor(JSONObject().put("type", "power").put("level", pct / 100.0).put("charging", charging))
+        // Android's own guess of the time to full, while charging (-1 when it can't tell)
+        val toFull = if (charging) service.getSystemService(BatteryManager::class.java)?.computeChargeTimeRemaining() ?: -1L else -1L
+        service.thor(
+            JSONObject().put("type", "power").put("level", pct / 100.0).put("charging", charging)
+                .put("chargeMs", if (toFull > 0) toFull else 0L)
+        )
+    }
+
+    // ---- shaking the Thor ---------------------------------------------------------------------
+    private val sensors = service.getSystemService(SensorManager::class.java)
+    private val peaks = ArrayDeque<Long>()
+    private var lastShake = 0L
+    private var shaking = false
+
+    private val shakeListener = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            val x = e.values[0]
+            val y = e.values[1]
+            val z = e.values[2]
+            // a real shake: well past gravity, three jolts within a second
+            if (sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH < 11f) return
+            val now = SystemClock.elapsedRealtime()
+            if (peaks.isNotEmpty() && now - peaks.last() < 120) return // the same jolt
+            peaks.addLast(now)
+            while (peaks.isNotEmpty() && now - peaks.first() > 1000) peaks.removeFirst()
+            if (peaks.size >= 3 && now - lastShake > 4000) {
+                lastShake = now
+                peaks.clear()
+                if (service.config.bool("shake", true)) service.thor(JSONObject().put("type", "shake"))
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    /** Only while the screen is on: nobody shakes a sleeping Thor, and it saves battery. */
+    private fun listenShake(on: Boolean) {
+        val sm = sensors ?: return
+        if (on == shaking) return
+        if (on) {
+            val acc = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return
+            shaking = sm.registerListener(shakeListener, acc, SensorManager.SENSOR_DELAY_UI, service.main)
+        } else {
+            sm.unregisterListener(shakeListener)
+            shaking = false
+        }
     }
 
     private val inputListener = object : InputManager.InputDeviceListener {

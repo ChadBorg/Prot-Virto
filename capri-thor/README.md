@@ -36,6 +36,17 @@ adds the Android side, which replaces Electron and Windows:
   library, that's a hoard.").
 - **Her chat knows.** When you talk to her, she knows today's playtime, what you're playing, your backlog, and what
   to recommend.
+- **Battery.** She speaks up at 30, 20, 15, 10, 5 and 2%, with a time-left estimate from the real drain rate.
+  Under 15% she nags every so often until you plug in. She tells you which games guzzle power ("eating 38% an
+  hour"), cheers when you plug in at the last second, and tells you when it's full. If she's put away during a
+  game on your only screen, the warning comes as a heads-up notification instead. **Battery check** is in her
+  menu.
+- **Shake the Thor.** She gets dizzy. Shake it three times and she gets mad (it costs you a little bond).
+- **Time of day.** She greets you the first time you pick the Thor up each day. Past 1am she comments on it, and
+  after 2 hours in one game she tells you to stretch.
+- **Her attitude** (in the app): a sass level (*Chill*, *Normal* or *Unhinged*) that sets how often she comments
+  and how patient she is in ES-DE. **Quiet hours** (23:00–08:00) mute everything except what you ask for and a
+  dying battery.
 - **REDLINE.** She recognises the REDLINE streaming app from this repo.
 
 ## Install
@@ -69,7 +80,7 @@ adds the Android side, which replaces Electron and Windows:
 | Do this | And she… |
 |---|---|
 | Tap her | Says what's up, or offers to talk |
-| Long-press her | Opens her menu: talk, pick me a game, today's stats, teleport, satellite, put away, switch screen, AI setup, turn off |
+| Long-press her | Opens her menu: talk, pick me a game, today's stats, battery check, teleport, satellite, put away, switch screen, AI setup, turn off |
 | Drag and release | Throws her (she has feelings about that) |
 | Tap her chip/mask when she's put away | Brings her back |
 

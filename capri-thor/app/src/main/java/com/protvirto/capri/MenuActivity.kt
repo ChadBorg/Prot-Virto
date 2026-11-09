@@ -73,6 +73,7 @@ class MenuActivity : ComponentActivity() {
             Item("Talk to her") { cmd("chat") },
             Item("Pick me a game") { cmd("thorPick") },
             Item("How am I doing today?") { cmd("thorStats") },
+            Item("Battery check") { cmd("thorBattery") },
             Item("Teleport") { cmd("teleport") },
             Item("Look at the satellite") { cmd("satellite") },
             Item("Make her yours…") { cmd("customize") },
