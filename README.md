@@ -1,3 +1,12 @@
+# Thor apps
+
+This repo holds two apps for the AYN Thor:
+
+* **REDLINE** (below): stream your gaming PC to the Thor from anywhere.
+* **[Capri for Thor](capri-thor/README.md)**: the Capri desktop companion ported to the Thor. She starts on boot, lives on the bottom screen, and roasts your ES-DE habits.
+
+---
+
 # REDLINE
 
 **Stream your gaming PC to an AYN Thor (or any Android handheld) from anywhere with Wi-Fi.**
@@ -29,7 +38,7 @@ Black-and-red cyberpunk UI, game library management, remote power and frame gene
 ## Setup
 
 ### 1. The PC (Windows 10/11)
-1. Download `REDLINE-Agent.zip` from the latest **Build REDLINE** run under the repo's *Actions* tab, or copy the `host-agent/` folder.
+1. Download `REDLINE-Agent.zip` from the latest **Build Thor apps** run under the repo's *Actions* tab, or copy the `host-agent/` folder.
 2. Open PowerShell **as Administrator** in that folder and run:
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass; .\install.ps1

@@ -1,0 +1,14 @@
+<resources>
+    <style name="Theme.Capri" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF07060B</item>
+        <item name="android:statusBarColor">#FF07060B</item>
+        <item name="android:navigationBarColor">#FF07060B</item>
+        <item name="android:colorAccent">#FF2DF0FF</item>
+    </style>
+    <style name="Theme.Capri.Dialog" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+</resources>

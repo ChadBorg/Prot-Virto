@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+# pulled from upstream at build time (tools/sync_upstream.py)
+app/src/main/assets/capri/

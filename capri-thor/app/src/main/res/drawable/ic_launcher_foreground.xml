@@ -1,0 +1,9 @@
+<!-- a construct's mask: two eyes in a green visor, red mane shards -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF2B4E" android:pathData="M30,40l8,-14l6,10l10,-16l10,16l6,-10l8,14z" />
+    <path android:fillColor="#36FF7A" android:pathData="M32,44h44l-4,22h-36z" />
+    <path android:fillColor="#07060B" android:pathData="M40,50h10v8h-10z M58,50h10v8h-10z" />
+    <path android:fillColor="#2DF0FF" android:pathData="M43,52h4v4h-4z M61,52h4v4h-4z" />
+    <path android:fillColor="#FF2B4E" android:pathData="M44,70l10,10l10,-10z" />
+</vector>
