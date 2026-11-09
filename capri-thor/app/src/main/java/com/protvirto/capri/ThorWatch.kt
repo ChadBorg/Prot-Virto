@@ -191,8 +191,11 @@ class ThorWatch(private val service: CapriService) {
         for ((i, line) in lines.withIndex()) {
             val m = LAUNCH.find(line) ?: continue
             val game = m.groupValues[1].trim()
-            val around = lines.subList((i - 4).coerceAtLeast(0), (i + 5).coerceAtMost(lines.size)).joinToString("\n")
-            val system = SYSTEM.find(around)?.groupValues?.get(1)?.lowercase(Locale.ROOT).orEmpty()
+            // the launch line names the system ("Nintendo Wii (wii)"); older logs only have it in the ROM path,
+            // which comes after the launch line
+            val after = lines.subList(i, (i + 12).coerceAtMost(lines.size)).joinToString("\n")
+            val system = m.groupValues[2].ifBlank { SYSTEM.find(after)?.groupValues?.get(1).orEmpty() }
+                .lowercase(Locale.ROOT)
             lastActive = SystemClock.elapsedRealtime()
             service.thor(JSONObject().put("type", "launch").put("game", game).put("system", system))
         }
@@ -389,9 +392,12 @@ class ThorWatch(private val service: CapriService) {
 
     companion object {
         private const val TAG = "CapriWatch"
-        // ES-DE: `Launching game "Chrono Trigger"...`
-        private val LAUNCH = Regex("Launching game \"(.+?)\"")
-        // the ROM's system folder, from the launch command around it: .../ROMs/snes/Chrono Trigger.sfc
-        private val SYSTEM = Regex("/(?:ROMs|roms|Roms)/([^/\"]+)/")
+        // ES-DE 3.x on Android (checked on a Thor, ES-DE 3.4.1):
+        //   Launching game "Bully : Scholarship Edition" from system "Nintendo Wii (wii)"...
+        // older/desktop builds: Launching game "Chrono Trigger"...
+        private val LAUNCH = Regex("Launching game \"(.+?)\"(?: from system \"[^\"]*\\(([^()\"]+)\\)\")?")
+        // fallback: the ROM's system folder from the launch command after it, either a plain path
+        // (.../ROMs/snes/Chrono Trigger.sfc) or Android's encoded SAF URI (...%3AROMs%2Fwii%2FBully...)
+        private val SYSTEM = Regex("(?:/|%2F|%3A)ROMs(?:/|%2F)([^/\"%]+)(?:/|%2F)", RegexOption.IGNORE_CASE)
     }
 }
