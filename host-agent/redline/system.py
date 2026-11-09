@@ -97,17 +97,46 @@ def primary_ip() -> str:
         s.close()
 
 
+_MAC_RE = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}")
+_WIRELESS = re.compile(r"wi-?fi|wlan|wireless", re.I)
+_WIRED = re.compile(r"^(ethernet|eth\d|en[op]\w*|lan)", re.I)
+_VIRTUAL = re.compile(r"vethernet|virtual|vmware|virtualbox|hyper-v|tailscale|zerotier|bluetooth|loopback|wsl", re.I)
+
+
+def _nic_mac(addrs) -> str | None:
+    import psutil
+
+    for a in addrs:
+        if a.family == psutil.AF_LINK and _MAC_RE.fullmatch(a.address):
+            return a.address.replace("-", ":").upper()
+    return None
+
+
+def pick_wol_mac(nics: dict, primary: str) -> str | None:
+    """The MAC to wake: the primary NIC's, unless that's Wi-Fi and a wired NIC exists.
+
+    Wake-on-LAN practically only works over wired Ethernet (here the Wi-Fi adapter isn't even wake-armed), so a PC
+    that is on Wi-Fi *now* but has a cable port should be woken through the cable port.
+    """
+    primary_name = next((n for n, addrs in nics.items() if any(a.address == primary for a in addrs)), None)
+    if primary_name and not _WIRELESS.search(primary_name):
+        return _nic_mac(nics[primary_name])
+    for name, addrs in nics.items():
+        if _WIRED.match(name) and not _VIRTUAL.search(name):
+            mac = _nic_mac(addrs)
+            if mac:
+                return mac
+    return _nic_mac(nics[primary_name]) if primary_name else None
+
+
 def mac_address() -> str:
-    """MAC of the NIC that owns the primary LAN address (needed for Wake-on-LAN)."""
-    ip = primary_ip()
+    """MAC used for Wake-on-LAN (see pick_wol_mac). Set "mac" in redline_config.json to override."""
     try:
         import psutil
 
-        for addrs in psutil.net_if_addrs().values():
-            if any(a.address == ip for a in addrs):
-                for a in addrs:
-                    if a.family == psutil.AF_LINK and re.fullmatch(r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}", a.address):
-                        return a.address.replace("-", ":").upper()
+        mac = pick_wol_mac(psutil.net_if_addrs(), primary_ip())
+        if mac:
+            return mac
     except ImportError:
         pass
     node = uuid.getnode()

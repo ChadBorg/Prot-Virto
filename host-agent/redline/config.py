@@ -24,6 +24,11 @@ DEFAULTS: dict[str, Any] = {
     # ddagrab (fast, GPU, Windows 8+) | gdigrab (compat)
     "capture": "ddagrab",
     "monitor_index": 0,
+    # Scaling to the resolution the handheld asks for. "auto": with ddagrab + NVENC/AMF, stream the native
+    # resolution and let the handheld's hardware decoder scale it (scaling on the PC means copying every frame
+    # off the GPU, which cost ~40% of the frame rate under game load). "always": scale on the PC anyway
+    # (less bandwidth headroom needed at the same bitrate on a 4K desktop).
+    "host_scaling": "auto",
     # Lossless Scaling integration (frame generation)
     "lossless_scaling_path": "",
     "lossless_scaling_hotkey": "ctrl+alt+s",

@@ -83,6 +83,37 @@ def test_ffmpeg_cmd_zero_copy_vs_scaled():
     assert vf.startswith("hwdownload,format=bgra,scale=1280:720") and vf.endswith("yuv420p")
 
 
+def test_ffmpeg_cmd_auto_keeps_gpu_path_native():
+    # ddagrab + NVENC with host_scaling=auto: no hwdownload/scale even when 1080p is asked for
+    auto = build_ffmpeg_cmd("ffmpeg", "hevc_nvenc", "ddagrab", 0, 1920, 1080, 60, 30000, host_scaling="auto")
+    assert "-vf" not in auto
+    forced = build_ffmpeg_cmd("ffmpeg", "hevc_nvenc", "ddagrab", 0, 1920, 1080, 60, 30000, host_scaling="always")
+    assert forced[forced.index("-vf") + 1].startswith("hwdownload,format=bgra,scale=1920:1080")
+    # software encoders still need the frames on the CPU, so they keep scaling
+    sw = build_ffmpeg_cmd("ffmpeg", "libx264", "ddagrab", 0, 1280, 720, 60, 10000, host_scaling="auto")
+    assert "scale=1280:720" in sw[sw.index("-vf") + 1]
+
+
+def test_wol_mac_prefers_wired_nic_when_on_wifi():
+    import psutil
+    from types import SimpleNamespace as NS
+
+    from redline.system import pick_wol_mac
+
+    def nic(mac, ip):
+        return [NS(family=psutil.AF_LINK, address=mac), NS(family=2, address=ip)]
+
+    nics = {"Wi-Fi": nic("C8-5E-A9-53-67-E5", "10.0.0.200"),
+            "Ethernet 3": nic("E8-9C-25-6D-B7-AE", "10.0.0.109"),
+            "vEthernet (WSL)": nic("00-15-5D-00-00-01", "172.20.0.1")}
+    # on Wi-Fi now: wake through the cable port
+    assert pick_wol_mac(nics, "10.0.0.200") == "E8:9C:25:6D:B7:AE"
+    # on the cable: that one, obviously
+    assert pick_wol_mac(nics, "10.0.0.109") == "E8:9C:25:6D:B7:AE"
+    # Wi-Fi only machine: Wi-Fi is all there is
+    assert pick_wol_mac({"Wi-Fi": nics["Wi-Fi"]}, "10.0.0.200") == "C8:5E:A9:53:67:E5"
+
+
 def _agent(tmp_path: Path) -> Agent:
     return Agent(Config(tmp_path / "cfg.json"))
 

@@ -12,7 +12,10 @@ function Line($label, $value, $ok) {
 }
 
 Write-Host "`n>> Thor report" -ForegroundColor Red
-if (-not ((adb devices) -match "`tdevice$")) { Write-Host "   The Thor isn't connected (adb devices)." -ForegroundColor Yellow; return }
+$serials = @((adb devices) -match "`tdevice$" | ForEach-Object { ($_ -split "`t")[0] })
+if (-not $serials) { Write-Host "   The Thor isn't connected (adb devices)." -ForegroundColor Yellow; return }
+# the same Thor is often listed twice (IP:port and mDNS name): pin one so `adb shell` doesn't fail
+if (-not $env:ANDROID_SERIAL -or $serials -notcontains $env:ANDROID_SERIAL) { $env:ANDROID_SERIAL = $serials[0] }
 
 # ---- apps ------------------------------------------------------------------------------------
 $pkgs = adb shell pm list packages
@@ -48,15 +51,19 @@ foreach ($id in $ids) {
 Write-Host "   screenshots: $Out\screen-*.png" -ForegroundColor DarkGray
 
 # ---- ES-DE: what Capri reads -------------------------------------------------------------------
+# ES-DE's folder is often on the SD card (/storage/XXXX-XXXX/ES-DE), not internal storage
 $esde = "/sdcard/ES-DE"
-$hasLog = (adb shell "ls $esde/logs/es_log.txt 2>/dev/null") -match "es_log"
+$found = @(adb shell "ls -d /sdcard/ES-DE/logs/es_log.txt /storage/*/ES-DE/logs/es_log.txt 2>/dev/null") |
+    Where-Object { $_ -match "/ES-DE/logs/es_log\.txt$" } | Select-Object -First 1
+if ($found) { $esde = $found.Trim() -replace "/logs/es_log\.txt$", "" }
+$hasLog = [bool]$found
 Line "ES-DE log" ($(if ($hasLog) { "$esde/logs/es_log.txt" } else { "not found (set the ES-DE folder in the Capri app)" })) $hasLog
 if ($hasLog) {
     $launch = adb shell "grep -i -n 'launch' $esde/logs/es_log.txt | tail -n 12"
     $launch | Set-Content (Join-Path $Out "esde-launch-lines.txt")
     $matched = ($launch | Select-String 'Launching game "').Count
     Line "  'Launching game' lines" $matched ($matched -gt 0)
-    Write-Host "   (launch lines saved: esde-launch-lines.txt — Capri's game detection depends on them)" -ForegroundColor DarkGray
+    Write-Host "   (launch lines saved: esde-launch-lines.txt - Capri's game detection depends on them)" -ForegroundColor DarkGray
 }
 $lists = (adb shell "ls $esde/gamelists 2>/dev/null") | Where-Object { $_.Trim() }
 Line "ES-DE gamelists" ("{0} systems" -f $lists.Count) ($lists.Count -gt 0)

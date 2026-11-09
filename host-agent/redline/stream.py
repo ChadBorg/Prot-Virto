@@ -59,10 +59,19 @@ def pick_encoder(ffmpeg: str, codec: str, configured: str) -> str:
     return "libx264"
 
 
+def keeps_native(capture: str, encoder: str, host_scaling: str = "auto") -> bool:
+    """True when frames should stay on the GPU at native size (ddagrab -> NVENC/AMF, no CPU scaling)."""
+    return (host_scaling != "always" and capture == "ddagrab"
+            and any(encoder.endswith(s) for s in ("_nvenc", "_amf")))
+
+
 def build_ffmpeg_cmd(ffmpeg: str, encoder: str, capture: str, monitor: int, width: int,
-                     height: int, fps: int, bitrate_kbps: int, source_override: list[str] | None = None) -> list[str]:
+                     height: int, fps: int, bitrate_kbps: int, source_override: list[str] | None = None,
+                     host_scaling: str = "always") -> list[str]:
     hw_capture = capture == "ddagrab"
     hw_encoder = any(encoder.endswith(s) for s in ("_nvenc", "_amf"))
+    if not source_override and keeps_native(capture, encoder, host_scaling):
+        width = height = 0  # zero-copy; the handheld's decoder scales
 
     if source_override:
         src = source_override
@@ -210,8 +219,11 @@ class StreamServer:
         codec = "hevc" if hello.get("codec") == "hevc" else "h264"
         ffmpeg = ffmpeg_binary(self.config["ffmpeg"])
         encoder = await loop.run_in_executor(None, pick_encoder, ffmpeg, codec, self.config["encoder"])
+        host_scaling = str(self.config["host_scaling"] or "auto")
+        if self.source_override is None and keeps_native(self.config["capture"], encoder, host_scaling):
+            width = height = 0  # reported as "native" to the handheld
         cmd = build_ffmpeg_cmd(ffmpeg, encoder, self.config["capture"], int(self.config["monitor_index"]),
-                               width, height, fps, bitrate, self.source_override)
+                               width, height, fps, bitrate, self.source_override, host_scaling)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,

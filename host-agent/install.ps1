@@ -13,16 +13,33 @@ function Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Red }
 
 # 1. Python ------------------------------------------------------------------
 Step "Checking Python"
-$py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $py) {
+# The real python.exe. Skip the Microsoft Store stub in WindowsApps: it's often first on PATH and only prints
+# "Python was not found", which made `python -m venv` fail here.
+function Find-Python {
+    foreach ($c in @(Get-Command python -All -ErrorAction SilentlyContinue)) {
+        if ($c.Source -notmatch "\\WindowsApps\\") { return $c.Source }
+    }
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        $exe = (& py -3 -c "import sys; print(sys.executable)" 2>$null | Select-Object -First 1)
+        if ($exe -and (Test-Path $exe)) { return $exe }
+    }
+    $local = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    if ($local) { return $local.FullName }
+    return $null
+}
+$python = Find-Python
+if (-not $python) {
     Write-Host "Installing Python 3.12 with winget..."
     winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+    $python = Find-Python
+    if (-not $python) { throw "Python 3 isn't installed (or can't be found). Install it from python.org and run this again." }
 }
-python --version
+& $python --version
 
 Step "Creating virtual environment + installing packages"
-if (-not (Test-Path ".venv")) { python -m venv .venv }
+if (-not (Test-Path ".venv")) { & $python -m venv .venv }
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Write-Host "If a ViGEmBus driver installer popped up, accept it - it provides the virtual Xbox controller."
@@ -42,8 +59,11 @@ if (-not $NoFfmpeg -and -not (Test-Path "ffmpeg.exe")) {
 # 3. Firewall -----------------------------------------------------------------------
 Step "Opening firewall ports 48100-48101 (TCP) and 48102 (UDP discovery)"
 Get-NetFirewallRule -DisplayName "REDLINE*" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-New-NetFirewallRule -DisplayName "REDLINE TCP" -Direction Inbound -Protocol TCP -LocalPort 48100,48101 -Action Allow -Profile Private,Domain | Out-Null
-New-NetFirewallRule -DisplayName "REDLINE UDP" -Direction Inbound -Protocol UDP -LocalPort 48102 -Action Allow -Profile Private,Domain | Out-Null
+# Windows often marks a wired home network "Public", and Private/Domain-only rules then silently block the Thor.
+# Allow every profile, but only from the local subnet and Tailscale's address range (100.64.0.0/10).
+$fw = @{ Direction = "Inbound"; Action = "Allow"; Profile = "Any"; RemoteAddress = @("LocalSubnet", "100.64.0.0/10") }
+New-NetFirewallRule -DisplayName "REDLINE TCP" -Protocol TCP -LocalPort 48100,48101 @fw | Out-Null
+New-NetFirewallRule -DisplayName "REDLINE UDP" -Protocol UDP -LocalPort 48102 @fw | Out-Null
 
 # 4. Autostart at logon --------------------------------------------------------------
 if (-not $NoAutostart) {
