@@ -20,6 +20,21 @@ const MIN = 60 * 1000;
 const STORE = 'capri.thor.day';
 
 const GREETED = 'capri.thor.greeted';
+const MEMORY = 'capri.thor.memory'; // per-game history across days + what she said lately
+
+// "45 minutes", "3.5 hours"
+function fmtMinutes(ms) {
+  const m = Math.round(ms / (60 * 1000));
+  return m >= 90 ? `${(m / 60).toFixed(1)} hours` : `${m} minutes`;
+}
+
+// a timestamp as "today", "yesterday", "5 days ago"
+function daysAgo(at) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const days = Math.ceil((start.getTime() - at) / 86400000);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+}
 // REDLINE counts too: it's PC gaming, and (dualScreen) she gets off the bottom screen its HUD uses
 const GAMEY = new Set(['game', 'emulator', 'stream', 'redline']);
 // battery levels she speaks up at, once per discharge (lowest crossed wins)
@@ -55,6 +70,8 @@ class Thor {
     this.said = {};         // key -> last time she said it (ms)
     this.hops = [];         // short sessions lately (commitment issues)
     this.day = this.loadDay();
+    this.memory = this.loadMemory();
+    this.selected = null;   // the game you're on in ES-DE: { game, system, info, at }
     this.quietUntil = 0;
     this.roamedAt = Date.now(); // her last trip to the other screen (roam)
     this.quips = 0;         // AI-written remarks asked for (ids)
@@ -119,11 +136,75 @@ class Thor {
     return h >= 23 || h < 8;
   }
 
-  // a line from thor-lines.js by its dotted key, filled in
+  // a line from thor-lines.js by its dotted key, filled in; never the same one twice in a row for a key
   line(key, vars = {}) {
     const lines = key.split('.').reduce((o, k) => o?.[k], this.t);
     if (!lines?.length) return '';
-    return fmt(pick(lines), { name: this.brain.custom?.userName || 'choom', ...vars });
+    const last = (this.lastLine ||= {})[key];
+    const fresh = lines.length > 1 ? lines.filter((l) => l !== last) : lines;
+    const chosen = pick(fresh);
+    this.lastLine[key] = chosen;
+    return fmt(chosen, { name: this.brain.custom?.userName || 'choom', ...vars });
+  }
+
+  // ---- her long-term memory of your games (kept across days) ---------------------------------
+  loadMemory() {
+    try {
+      const m = JSON.parse(localStorage.getItem(MEMORY) || 'null');
+      if (m && m.games) return { games: m.games, said: m.said || [] };
+    } catch {
+      // she starts over
+    }
+    return { games: {}, said: [] };
+  }
+
+  saveMemory() {
+    try {
+      localStorage.setItem(MEMORY, JSON.stringify(this.memory));
+    } catch {
+      // she forgets: no harm done
+    }
+  }
+
+  memGame(name) {
+    const k = String(name || '').toLowerCase().trim();
+    if (!k) return null;
+    return (this.memory.games[k] ||= { name, launches: 0, playMs: 0, quick: 0, last: [] });
+  }
+
+  // a session she saw end: how long, and whether you bailed
+  remember(name, ms) {
+    const g = this.memGame(name);
+    if (!g) return;
+    g.playMs += ms;
+    if (ms < 3 * MIN) g.quick += 1;
+    g.last = [{ at: Date.now(), min: Math.round(ms / MIN) }, ...(g.last || [])].slice(0, 5);
+    // keep the 150 most recent games
+    const all = Object.entries(this.memory.games);
+    if (all.length > 150) {
+      all.sort((a, b) => (b[1].last?.[0]?.at || 0) - (a[1].last?.[0]?.at || 0));
+      this.memory.games = Object.fromEntries(all.slice(0, 150));
+    }
+    this.saveMemory();
+  }
+
+  // what she remembers about a game with you, in a sentence (for her AI brain and her chat)
+  recall(name) {
+    const g = this.memory.games[String(name || '').toLowerCase().trim()];
+    if (!g || (!g.launches && !g.last?.length)) return '';
+    const bits = [];
+    if (g.launches) bits.push(`you have seen them launch it ${g.launches} time(s)`);
+    if (g.playMs >= MIN) bits.push(`about ${fmtMinutes(g.playMs)} played in total`);
+    const l = g.last?.[0];
+    if (l) bits.push(`last session ${l.min} minute(s), ${daysAgo(l.at)}`);
+    if (g.quick >= 2) bits.push(`they quit it within 3 minutes ${g.quick} times`);
+    return bits.join('; ');
+  }
+
+  // what she said lately, so she doesn't repeat herself
+  rememberSaid(text) {
+    this.memory.said = [text, ...this.memory.said.filter((t) => t !== text)].slice(0, 12);
+    this.saveMemory();
   }
 
   // not in the middle of something that matters more, not put away, not mid-game
@@ -146,6 +227,7 @@ class Thor {
       this.capri.wake();
       const shown = this.panel.say({ kind: 'info', face, line, hold, ...(actions && { actions, onAction }) });
       if (shown !== false && act && this.capri.free) this.capri.perform(act);
+      if (shown !== false) this.rememberSaid(line);
       return shown !== false;
     };
     // what you asked for, and what can't wait (a dying battery), comes at once and word for word
@@ -188,7 +270,11 @@ class Thor {
     // On the Thor, Groq answered the Chrono Trigger launch with "Firing up REDLINE now..." (from the
     // day's context) and never named the game: the event goes first and plainly, and is checked below.
     const moment = MOMENTS[key] || key.replace(/\./g, ' ');
-    const about = vars.about ? `\nWhat their library says about it: ${vars.about}` : '';
+    let about = vars.about ? `\nWhat their library says about it: ${vars.about}` : '';
+    const history = vars.game ? this.recall(vars.game) : '';
+    if (history) about += `\nWhat you remember of them and this game: ${history}.`;
+    const recent = this.memory.said.slice(0, 6);
+    if (recent.length) about += `\nThings you said lately (don't repeat them or their jokes):\n- ${recent.join('\n- ')}`;
     const opinion = vars.game
       ? '\nIf you know this game, give your real take on it, in character: its story, how it plays, its reputation, a ' +
         'detail fans know. Only say what you are sure is true about it; if you don\'t know it, react to its name and their history with it.'
@@ -284,8 +370,14 @@ class Thor {
 
   onLaunch({ game, system, info }) {
     if (!game) return;
-    this.launched = { game, system: system || '', at: Date.now() };
+    this.launched = { game, system: system || '', info, at: Date.now() };
     clearTimeout(this.hoverTimer);
+    const g = this.memGame(game);
+    if (g) {
+      g.launches += 1;
+      g.system = system || g.system;
+      this.saveMemory();
+    }
     // the emulator comes to the front right after: startSession picks the name up from here
     this.quietUntil = 0;
     const shown = this.say('launch', { game, system: prettySystem(system), about: aboutGame(info) },
@@ -380,6 +472,7 @@ class Thor {
     const ms = Date.now() - s.since;
     this.day.playMs += ms;
     this.saveDay();
+    if (s.kind !== 'redline') this.remember(s.name, ms);
     const min = Math.max(1, Math.round(ms / MIN));
     const back = async () => {
       if (s.stowed && this.capri.stowed) await this.capri.unstow();
@@ -742,6 +835,18 @@ class Thor {
     if (this.batt) parts.push(`The Thor's battery: ${this.batt.pct}%${this.batt.charging ? ', charging' : `, on battery (${this.eta('unknown time')} left)`}.`);
     if (this.session) parts.push(`Right now they are playing ${this.session.name}.`);
     else if (this.app) parts.push(`Right now the app in front is ${this.app.label}.`);
+    // what they're looking at in ES-DE ("what do you think of this one?")
+    const sel = this.selected;
+    if (!this.session && sel && this.app?.kind === 'esde' && Date.now() - sel.at < 10 * MIN) {
+      parts.push(`In ES-DE they have ${sel.game} (${prettySystem(sel.system)}) selected right now; "this one" means it. ${aboutGame(sel.info)}`);
+    }
+    // her memory of the games she's seen them play, most recent first
+    const known = Object.values(this.memory.games)
+      .filter((g) => g.last?.length || g.launches)
+      .sort((a, b) => (b.last?.[0]?.at || 0) - (a.last?.[0]?.at || 0))
+      .slice(0, 8)
+      .map((g) => `${g.name}: ${this.recall(g.name)}`);
+    if (known.length) parts.push(`What you remember of their recent games:\n- ${known.join('\n- ')}`);
     if (lib) {
       parts.push(`Their ES-DE library: ${lib.total} games, ${lib.never} never played, ${lib.favorites} favorites (${lib.favNever} of them never played).`);
       if (lib.top?.name) parts.push(`Most played: ${lib.top.name} (${lib.top.count} times).`);
@@ -771,6 +876,11 @@ const MOMENTS = {
   'browse.never': 'they are browsing ES-DE and have stopped on this game, which they own but have never launched; its preview clip is playing',
   'browse.again': 'they are browsing ES-DE and have stopped on this game, one they play a lot; its preview clip is playing',
   preview: 'ES-DE\'s screensaver is playing a clip of this game from their library while they are idle',
+  'game.quick': 'they just quit this game after only a few minutes',
+  'game.end': 'they just finished a play session of this game and came back to ES-DE',
+  'game.marathon': 'they just finished a very long session of this game',
+  'game.start': 'they just started playing this game',
+  hopping: 'they keep launching games and quitting them within minutes, this one was the latest',
 };
 
 // What their gamelist says about a game, for her AI brain: genre, year, developer, how much they play it.
