@@ -53,6 +53,7 @@ class ThorWatch(private val service: CapriService) {
     fun start() {
         loop.scheduleWithFixedDelay({ safe { pollForeground() } }, 1, 1500, TimeUnit.MILLISECONDS)
         loop.scheduleWithFixedDelay({ safe { pollLog() } }, 2, 2, TimeUnit.SECONDS)
+        loop.scheduleWithFixedDelay({ safe { pollSelection() } }, 3, 1, TimeUnit.SECONDS)
         loop.scheduleWithFixedDelay({ safe { scanLibrary() } }, 8, 30 * 60, TimeUnit.SECONDS)
         service.registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -198,8 +199,94 @@ class ThorWatch(private val service: CapriService) {
                 .lowercase(Locale.ROOT)
             lastActive = SystemClock.elapsedRealtime()
             Log.i(TAG, "launch: \"$game\" ($system)") // thor-check.ps1 collects these
-            service.thor(JSONObject().put("type", "launch").put("game", game).put("system", system))
+            service.thor(JSONObject().put("type", "launch").put("game", game).put("system", system)
+                .put("info", gameInfo(system, null, game) ?: JSONObject.NULL))
         }
+    }
+
+    // ---- what you're looking at in ES-DE --------------------------------------------------------
+    // ES-DE runs custom event scripts on game-select (and for the game its screensaver shows); the
+    // ES-DE Companion app's scripts write the game to these files, which we watch.
+    private val companionLogs = File("/storage/emulated/0/ES-DE Companion/logs")
+    private val seen = mutableMapOf<String, Long>()
+
+    private fun pollSelection() {
+        watchGame("esde_game", "select")
+        watchGame("esde_screensavergameselect", "preview")
+    }
+
+    private fun watchGame(prefix: String, type: String) {
+        val nameFile = File(companionLogs, "${prefix}_name.txt")
+        val stamp = nameFile.lastModified()
+        if (stamp == 0L) return
+        val before = seen.put(prefix, stamp)
+        if (before == null || before == stamp) return // first look: what was already there isn't news
+        val name = runCatching { nameFile.readText().trim() }.getOrDefault("")
+        if (name.isBlank()) return
+        val system = runCatching { File(companionLogs, "${prefix}_system.txt").readText().trim() }.getOrDefault("")
+        val path = runCatching { File(companionLogs, "${prefix}_filename.txt").readText().trim() }.getOrDefault("")
+        lastActive = SystemClock.elapsedRealtime()
+        service.thor(JSONObject().put("type", type).put("game", name).put("system", system.lowercase(Locale.ROOT))
+            .put("info", gameInfo(system, path, name) ?: JSONObject.NULL))
+    }
+
+    // one system's gamelist, parsed when first asked for and again when it changes
+    private val gamelists = mutableMapOf<String, Pair<Long, List<JSONObject>>>()
+
+    /** What your library says about a game: description, genre, year, how often you've played it. */
+    private fun gameInfo(system: String, path: String?, name: String): JSONObject? {
+        if (system.isBlank()) return null
+        val file = File(esde(), "gamelists/${system.lowercase(Locale.ROOT)}/gamelist.xml")
+        val stamp = file.lastModified()
+        val games = gamelists[system]?.takeIf { it.first == stamp }?.second
+            ?: runCatching { parseGamelist(file) }.getOrNull()?.also { gamelists[system] = stamp to it }
+            ?: return null
+        val base = path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        return games.firstOrNull { base != null && it.optString("file") == base }
+            ?: games.firstOrNull { it.optString("name").equals(name, ignoreCase = true) }
+    }
+
+    private fun parseGamelist(file: File): List<JSONObject> {
+        val out = mutableListOf<JSONObject>()
+        file.inputStream().buffered().use { input ->
+            val p = Xml.newPullParser()
+            p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            p.setInput(input, null)
+            var game: JSONObject? = null
+            var tag = ""
+            while (p.next() != XmlPullParser.END_DOCUMENT) {
+                when (p.eventType) {
+                    XmlPullParser.START_TAG -> {
+                        tag = p.name
+                        if (tag == "game") game = JSONObject()
+                    }
+                    XmlPullParser.TEXT -> {
+                        val g = game
+                        val v = p.text.trim()
+                        if (g != null && v.isNotEmpty()) when (tag) {
+                            "path" -> g.put("file", v.substringAfterLast('/'))
+                            "name" -> g.put("name", v)
+                            "desc" -> g.put("desc", v.take(600))
+                            "genre" -> g.put("genre", v)
+                            "developer" -> g.put("developer", v)
+                            "releasedate" -> g.put("year", v.take(4))
+                            "playcount" -> g.put("playcount", v.toIntOrNull() ?: 0)
+                            "lastplayed" -> g.put("lastplayed", v)
+                            "favorite" -> g.put("favorite", v == "true")
+                            "rating" -> g.put("rating", v.toDoubleOrNull() ?: 0.0)
+                        }
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (p.name == "game") {
+                            game?.let { out += it }
+                            game = null
+                        }
+                        tag = ""
+                    }
+                }
+            }
+        }
+        return out
     }
 
     /** Reads every gamelist.xml: how big the library is, what gets played, what never does. */

@@ -39,6 +39,30 @@ export const LINES = {
     ],
   },
 
+  // hovering a game in ES-DE for a while (her AI brain makes these about the game itself)
+  browse: {
+    hover: [
+      '{game}, huh? You\'ve been staring at it long enough to owe it rent.',
+      'Ooh, {game}. That one\'s been waiting for you. Patiently. Unlike me.',
+      '{game} on {system}. Go on. Press the button. I dare you.',
+    ],
+    never: [
+      '{game}: never launched. Not once. It can see you looking, you know.',
+      'You own {game} and you\'ve never played it? It\'s been sitting there collecting dust, {name}.',
+    ],
+    again: [
+      '{game} again? Played it {count} times. Comfort food, I get it.',
+      'Back to {game}, your old favorite. Some things never change, {name}.',
+    ],
+  },
+
+  // ES-DE's screensaver showing a game's clip
+  preview: [
+    'Look, {game}. The screensaver\'s trying to sell you something you already own.',
+    'Even the screensaver thinks you should play {game}. Just saying.',
+    'Ooh, {game} footage. Remember games? You used to play them.',
+  ],
+
   launch: [
     '{game}! On {system}! Finally, some action.',
     'Ooh, {game}. Respectable. Don\'t you dare quit in five minutes.',

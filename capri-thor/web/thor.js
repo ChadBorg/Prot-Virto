@@ -162,8 +162,17 @@ class Thor {
   // many requests) after two calls and repeated itself, and her chat shares its allowance. With a key
   // (Groq, Gemini...) or Ollama, she writes her own remarks.
   get aiReady() {
+    return !this.aiWhyNot;
+  }
+
+  // why her remarks are written lines right now ('' = they're her own)
+  get aiWhyNot() {
+    if (this.cfg.aiLines === false) return 'switched off';
     const provider = this.cfg.provider || 'pollinations';
-    return this.cfg.aiLines !== false && provider !== 'pollinations' && Date.now() > this.aiDownUntil && !this.chat.open;
+    if (provider === 'pollinations') return `no AI provider (${this.cfg.provider || 'unset'})`;
+    if (Date.now() <= this.aiDownUntil) return 'backing off';
+    if (this.chat.open) return 'chat open';
+    return '';
   }
 
   // One spontaneous remark from her chat brain, in the spirit of `line` (which keeps the facts:
@@ -178,9 +187,14 @@ class Thor {
     ].join('\n');
     // On the Thor, Groq answered the Chrono Trigger launch with "Firing up REDLINE now..." (from the
     // day's context) and never named the game: the event goes first and plainly, and is checked below.
-    const user = `What just happened (${key.replace(/\./g, ' ')}): ${line}\n` +
-      'That is what you would usually say. Say it again your own way, fresh words, reacting to exactly this. ' +
-      'Mention the same game, app or numbers, unchanged.';
+    const moment = MOMENTS[key] || key.replace(/\./g, ' ');
+    const about = vars.about ? `\nWhat their library says about it: ${vars.about}` : '';
+    const opinion = vars.game
+      ? '\nIf you know this game, give your real take on it, in character: its story, how it plays, its reputation, a ' +
+        'detail fans know. Only say what you are sure is true about it; if you don\'t know it, react to its name and their history with it.'
+      : '';
+    const user = `What just happened: ${moment}. Your usual line here: "${line}"${about}${opinion}\n` +
+      'Say something your own way, fresh words, reacting to exactly this. Mention the same game, app or numbers, unchanged.';
     const timeout = new Promise((resolve) => setTimeout(() => resolve(null), AI_LINE_TIMEOUT));
     let res = null;
     try {
@@ -213,6 +227,8 @@ class Thor {
     switch (evt.type) {
       case 'app': return this.onApp(evt);
       case 'launch': return this.onLaunch(evt);
+      case 'select': return this.onSelect(evt);
+      case 'preview': return this.onPreview(evt);
       case 'library': return this.onLibrary(evt);
       case 'screen': return this.onScreen(evt);
       case 'power': return this.onPower(evt);
@@ -266,16 +282,51 @@ class Thor {
     this.saveDay();
   }
 
-  onLaunch({ game, system }) {
+  onLaunch({ game, system, info }) {
     if (!game) return;
     this.launched = { game, system: system || '', at: Date.now() };
+    clearTimeout(this.hoverTimer);
     // the emulator comes to the front right after: startSession picks the name up from here
     this.quietUntil = 0;
-    const shown = this.say('launch', { game, system: prettySystem(system) }, { face: 'laugh', hold: 3200, act: 'hop', force: true });
+    const shown = this.say('launch', { game, system: prettySystem(system), about: aboutGame(info) },
+      { face: 'laugh', hold: 4200, act: 'hop', force: true });
     // logcat tag CapriWeb: why a launch line didn't show (quiet hours, panel busy, stowed...)
     const c = this.capri;
-    console.log(`[thor] launch "${game}" (${system || '?'}) shown=${shown} quiet=${this.quietNow()} ` +
+    console.log(`[thor] launch "${game}" (${system || '?'}) shown=${shown} ai=${this.aiWhyNot || 'ready'} quiet=${this.quietNow()} ` +
       `stowed=${!!c.stowed} dormant=${!!c.dormant} hidden=${!!c.hidden} panel=${this.panel.current?.kind || '-'}/${!!this.panel.visible}`);
+  }
+
+  // ES-DE: the game you're on (its clip playing). Rest on one a few seconds and she has a thought about it.
+  onSelect({ game, system, info }) {
+    if (!game) return;
+    this.selected = { game, system: system || '', info, at: Date.now() };
+    clearTimeout(this.hoverTimer);
+    this.hoverTimer = setTimeout(() => this.hoverRemark(), HOVER_DWELL);
+  }
+
+  hoverRemark() {
+    const s = this.selected;
+    const now = Date.now();
+    if (!s || now - s.at < HOVER_DWELL - 300 || this.session || this.app?.kind !== 'esde') return;
+    if (this.launched && now - this.launched.at < 30 * 1000) return;
+    if (now - (this.hoverSaidAt || 0) < HOVER_GAP * (this.sass?.every || 1)) return;
+    // her written lines run out fast: without her AI brain, only now and then
+    if (!this.aiReady && Math.random() > 0.3) return;
+    const n = s.info?.playcount || 0;
+    const key = !s.info ? 'browse.hover' : n === 0 ? 'browse.never' : n >= 5 ? 'browse.again' : 'browse.hover';
+    const vars = { game: s.game, system: prettySystem(s.system), count: n, about: aboutGame(s.info) };
+    if (this.say(key, vars, { face: 'look', hold: 7000 })) this.hoverSaidAt = now;
+  }
+
+  // ES-DE's screensaver playing a game's clip: now and then she reacts to it
+  onPreview({ game, system, info }) {
+    if (!game || this.session) return;
+    if (Date.now() - (this.previewSaidAt || 0) < PREVIEW_GAP * (this.sass?.every || 1)) return;
+    setTimeout(() => {
+      if (this.session) return;
+      const vars = { game, system: prettySystem(system), about: aboutGame(info) };
+      if (this.say('preview', vars, { face: 'look', hold: 7000 })) this.previewSaidAt = Date.now();
+    }, 2500); // let the clip get going
   }
 
   async startSession(evt) {
@@ -707,6 +758,44 @@ const SYSTEMS = {
   gamegear: 'Game Gear', arcade: 'Arcade', mame: 'MAME', fbneo: 'FinalBurn Neo', neogeo: 'Neo Geo', pcengine: 'PC Engine',
   atari2600: 'Atari 2600', windows: 'PC', steam: 'Steam', android: 'Android', segacd: 'Sega CD', sega32x: '32X', xbox: 'Xbox',
 };
+// ES-DE browsing: a thought about the game you rest on for HOVER_DWELL, at most every HOVER_GAP (and
+// her screensaver remarks at most every PREVIEW_GAP), both stretched by her sass level
+const HOVER_DWELL = 5000;
+const HOVER_GAP = 75 * 1000;
+const PREVIEW_GAP = 4 * MIN;
+
+// what's happening, for her AI brain (the key alone was too vague)
+const MOMENTS = {
+  launch: 'they just launched this game from ES-DE, it is starting now',
+  'browse.hover': 'they are browsing ES-DE and have stopped on this game for a few seconds; its preview clip is playing',
+  'browse.never': 'they are browsing ES-DE and have stopped on this game, which they own but have never launched; its preview clip is playing',
+  'browse.again': 'they are browsing ES-DE and have stopped on this game, one they play a lot; its preview clip is playing',
+  preview: 'ES-DE\'s screensaver is playing a clip of this game from their library while they are idle',
+};
+
+// What their gamelist says about a game, for her AI brain: genre, year, developer, how much they play it.
+export function aboutGame(info) {
+  if (!info) return '';
+  const bits = [];
+  const what = [info.genre, info.year && `from ${info.year}`, info.developer && `by ${info.developer}`].filter(Boolean).join(', ');
+  if (what) bits.push(what);
+  const n = info.playcount || 0;
+  bits.push(n ? `they have launched it ${n} time(s)` : 'they have never launched it');
+  if (info.favorite) bits.push('it is one of their favorites');
+  if (info.lastplayed) bits.push(`last played ${ago(info.lastplayed)}`);
+  let s = `${bits.join('; ')}.`;
+  if (info.desc) s += ` The library's blurb: ${String(info.desc).slice(0, 350)}`;
+  return s;
+}
+
+// ES-DE's "20261109T175102" as "today", "yesterday", "12 days ago"
+function ago(stamp) {
+  const m = /^(\d{4})(\d{2})(\d{2})T/.exec(stamp || '');
+  if (!m) return 'a while ago';
+  const days = Math.floor((Date.now() - new Date(+m[1], +m[2] - 1, +m[3]).getTime()) / 86400000);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
 // roaming between the Thor's screens: at least ROAM_GAP apart, then a ROAM_CHANCE per 30 s tick
 // (about every 4-6 minutes when nothing's going on)
 const ROAM_GAP = 3 * MIN;
