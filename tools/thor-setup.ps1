@@ -132,6 +132,12 @@ function Find-Adb($kind) {
 }
 if (-not (Connected)) {
     adb start-server | Out-Null
+    # already paired before? Then Wireless debugging only needs to be on: connect without a code
+    $known = $null
+    for ($i = 0; $i -lt 5 -and -not $known; $i++) { $known = Find-Adb "connect"; if (-not $known) { Start-Sleep 2 } }
+    if ($known) { adb connect $known 2>&1 | Out-Null; Start-Sleep 2 }
+}
+if (-not (Connected)) {
     Write-Host "   On the Thor: Settings > About > tap 'Build number' 7 times (Developer options)."
     Write-Host "   Then: Settings > System > Developer options > Wireless debugging > ON > 'Pair device with pairing code'."
     Write-Host "   (The Thor and this PC must be on the same Wi-Fi.)"
@@ -185,6 +191,12 @@ Note "overlay, usage access, all files, notifications, no battery limits: grante
 # CapriService isn't exported, so adb can't start it directly: ask her app to wake her
 adb shell am start -n "$p/.MainActivity" --ez wake true 2>&1 | Out-Null
 Start-Sleep 3
+if (-not ((adb shell dumpsys activity services $p) -match "CapriService")) {
+    # an app process started before the overlay permission was granted still believes it's denied: restart it
+    adb shell am force-stop $p
+    adb shell am start -n "$p/.MainActivity" --ez wake true 2>&1 | Out-Null
+    Start-Sleep 4
+}
 if ((adb shell dumpsys activity services $p) -match "CapriService") { Note "Capri is awake (bottom screen)" }
 else { Write-Host "   Capri didn't start by herself: open the Capri app on the Thor and tap WAKE HER UP." -ForegroundColor Yellow }
 
