@@ -56,6 +56,7 @@ class Thor {
     this.hops = [];         // short sessions lately (commitment issues)
     this.day = this.loadDay();
     this.quietUntil = 0;
+    this.roamedAt = Date.now(); // her last trip to the other screen (roam)
     this.quips = 0;         // AI-written remarks asked for (ids)
     this.aiDownUntil = 0;   // after a failed AI remark: written lines only until then
     this.cfg = {};
@@ -506,11 +507,28 @@ class Thor {
   }
 
   // ---- the procrastination engine ------------------------------------------------------------
+  // Now and then, with nothing going on, she leaps over to the other screen through their shared
+  // edge (Overlay.kt lays them side by side for that). Never during a game or a stream (the dodge
+  // keeps her off your game's screen), nor over a video, nor when wandering is off in her menu.
+  async roam(now) {
+    const c = this.capri;
+    if (this.cfg.wander === false || this.display.count < 2 || this.session) return;
+    if (!this.free || c.busy || c.dragging || c.act || c.mode === 'sleep' || c.mode === 'alert') return;
+    if (['video', 'social', 'stream', 'redline', 'game', 'emulator'].includes(this.app?.kind)) return;
+    if (now - this.roamedAt < ROAM_GAP || Math.random() > ROAM_CHANCE) return;
+    this.roamedAt = now;
+    const other = await host.thor('otherScreen');
+    if (other == null || this.session) return;
+    console.log(`[thor] roam ${this.display.current} -> ${other}`);
+    host.thor('goScreen', other);
+  }
+
   tick() {
     this.rollDay();
     const now = Date.now();
     this.batteryNag(now);
     if (this.session) return this.sessionTick(now);
+    this.roam(now);
     const app = this.app;
     if (!app) return;
     const there = now - app.since;
@@ -651,6 +669,11 @@ const SYSTEMS = {
   gamegear: 'Game Gear', arcade: 'Arcade', mame: 'MAME', fbneo: 'FinalBurn Neo', neogeo: 'Neo Geo', pcengine: 'PC Engine',
   atari2600: 'Atari 2600', windows: 'PC', steam: 'Steam', android: 'Android', segacd: 'Sega CD', sega32x: '32X', xbox: 'Xbox',
 };
+// roaming between the Thor's screens: at least ROAM_GAP apart, then a ROAM_CHANCE per 30 s tick
+// (about every 4-6 minutes when nothing's going on)
+const ROAM_GAP = 3 * MIN;
+const ROAM_CHANCE = 0.3;
+
 // her AI-written remarks: how long she may think before saying her written line instead
 // (Pollinations answers in 0.4-9 s on the Thor; Groq or a local Ollama in well under a second)
 const AI_LINE_TIMEOUT = 7000;

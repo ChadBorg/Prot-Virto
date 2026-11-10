@@ -156,23 +156,25 @@ class Overlay(private val service: CapriService, private val bridge: Bridge) {
 
     fun screens(): JSONObject {
         val list = JSONArray()
-        var y = 0
-        for (d in displays.displays) {
+        var x = 0
+        // Laid out side by side, top screen first, sharing an edge: her renderer (upstream) only
+        // crosses between screens through a side edge. Stacked (as the Thor really is) she could only
+        // teleport; this way she leaps across, gets thrown through, and roams between them.
+        for (d in displays.displays.sortedBy { if (it.displayId == Display.DEFAULT_DISPLAY) 0 else 1 }) {
             val ctx = service.createDisplayContext(d)
             val m = ctx.resources.displayMetrics
             val wpx = ctx.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
             val w = (wpx.width() / m.density).toInt()
             val h = (wpx.height() / m.density).toInt()
-            // stacked like the Thor's: no shared side edge, so she travels by teleport
-            list.put(JSONObject().put("id", d.displayId).put("x", 0).put("y", y).put("w", w).put("h", h))
-            y += h
+            list.put(JSONObject().put("id", d.displayId).put("x", x).put("y", 0).put("w", w).put("h", h))
+            x += w
         }
         val origin = list.let { arr ->
             (0 until arr.length()).map { arr.getJSONObject(it) }.firstOrNull { it.getInt("id") == display.displayId }
         }
         return JSONObject()
             .put("current", display.displayId)
-            .put("origin", JSONObject().put("x", 0).put("y", origin?.optInt("y") ?: 0))
+            .put("origin", JSONObject().put("x", origin?.optInt("x") ?: 0).put("y", 0))
             .put("list", list)
     }
 
