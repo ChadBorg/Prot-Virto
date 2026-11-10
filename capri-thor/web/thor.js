@@ -275,9 +275,13 @@ class Thor {
     if (history) about += `\nWhat you remember of them and this game: ${history}.`;
     const recent = this.memory.said.slice(0, 6);
     if (recent.length) about += `\nThings you said lately (don't repeat them or their jokes):\n- ${recent.join('\n- ')}`;
+    // On the Thor the first version read like a review ("...still dazzles with its seamless plot and the
+    // legendary Active Time Battle system. Fans love..."): she's a friend with opinions, not a critic.
     const opinion = vars.game
-      ? '\nIf you know this game, give your real take on it, in character: its story, how it plays, its reputation, a ' +
-        'detail fans know. Only say what you are sure is true about it; if you don\'t know it, react to its name and their history with it.'
+      ? '\nYou have opinions about games. If you know this one, slip in ONE thing about it (its story, how it plays, ' +
+        'its reputation) as a teasing aside, not a review, and only if you are sure it is true. ' +
+        (history ? 'Tie it to them: tease them about their history with it. ' : '') +
+        'Talk to them, about them and this game, like a friend watching over their shoulder.'
       : '';
     const user = `What just happened: ${moment}. Your usual line here: "${line}"${about}${opinion}\n` +
       'Say something your own way, fresh words, reacting to exactly this. Mention the same game, app or numbers, unchanged.';
@@ -939,7 +943,7 @@ export function cleanQuip(text) {
     .replace(/^capri\s*:\s*/i, '')
     .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
     .trim();
-  if (s.length < 4 || s.length > 220) return null;
+  if (s.length < 4 || s.length > 190) return null; // ~30 words: a remark, not a paragraph
   if (/\b(as an ai|language model|i can(?:'|no)t help|i'm sorry, but)\b/i.test(s)) return null;
   return s;
 }
