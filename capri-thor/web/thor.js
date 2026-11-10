@@ -208,7 +208,19 @@ class Thor {
       case 'power': return this.onPower(evt);
       case 'shake': return this.onShake();
       case 'thermal': return this.onThermal(evt);
-      case 'display': this.display = { ...this.display, ...evt }; return null;
+      case 'display':
+        this.display = { ...this.display, ...evt };
+        // safety net after a screen change: never left standing outside the screen
+        setTimeout(() => {
+          const c = this.capri;
+          const p = c.pos;
+          if (!p || !c.view || c.busy || c.dragging || c.stowed || c.flight) return;
+          if (p.x < 0 || p.x > c.view.w || p.y > c.view.h) {
+            console.log(`[thor] off screen at ${Math.round(p.x)},${Math.round(p.y)}: back in`);
+            c.teleport?.(c.spot?.('random'));
+          }
+        }, 4000);
+        return null;
       case 'say': return this.say(evt.key, evt.vars || {}, { force: true });
       default: return null;
     }

@@ -137,6 +137,14 @@ def main() -> None:
     patch(OUT / "src/renderer/styles/capri.css", "@font-face {",
           "html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; "
           "-webkit-tap-highlight-color: transparent; }\n.panel__input { -webkit-user-select: text; user-select: text; }\n@font-face {")
+    # Crossing to the other screen: moving her window to another display takes a moment on Android,
+    # and a slow arrival fell straight down just outside the edge she came in by (seen on the Thor:
+    # standing past the right edge, 13 px of her showing). Always come in with some speed, inward.
+    patch(OUT / "src/renderer/js/capri.js",
+          "f.c = { x: side > 0 ? -r.maxX - 4 : this.view.w - r.minX + 4, y: clamp(there.y, 80, this.view.floor - 80) };",
+          "f.c = { x: side > 0 ? -r.maxX - 4 : this.view.w - r.minX + 4, y: clamp(there.y, 80, this.view.floor - 80) };\n"
+          "    f.v.x = side * Math.max(Math.abs(f.v.x), 560); // Thor: always far enough in\n"
+          "    f.v.y = Math.min(f.v.y, -120); // and a little up, not dropping at the edge")
     converted = downlevel_colors(OUT / "src/renderer")
     print(f"Capri synced from {UPSTREAM}@{COMMIT[:8]} into {OUT.relative_to(ROOT)} ({converted} oklch colours -> rgb)")
 
