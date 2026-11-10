@@ -197,6 +197,7 @@ class ThorWatch(private val service: CapriService) {
             val system = m.groupValues[2].ifBlank { SYSTEM.find(after)?.groupValues?.get(1).orEmpty() }
                 .lowercase(Locale.ROOT)
             lastActive = SystemClock.elapsedRealtime()
+            Log.i(TAG, "launch: \"$game\" ($system)") // thor-check.ps1 collects these
             service.thor(JSONObject().put("type", "launch").put("game", game).put("system", system))
         }
     }

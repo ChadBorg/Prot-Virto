@@ -194,7 +194,11 @@ class Thor {
     this.launched = { game, system: system || '', at: Date.now() };
     // the emulator comes to the front right after: startSession picks the name up from here
     this.quietUntil = 0;
-    this.say('launch', { game, system: prettySystem(system) }, { face: 'laugh', hold: 3200, act: 'hop', force: true });
+    const shown = this.say('launch', { game, system: prettySystem(system) }, { face: 'laugh', hold: 3200, act: 'hop', force: true });
+    // logcat tag CapriWeb: why a launch line didn't show (quiet hours, panel busy, stowed...)
+    const c = this.capri;
+    console.log(`[thor] launch "${game}" (${system || '?'}) shown=${shown} quiet=${this.quietNow()} ` +
+      `stowed=${!!c.stowed} dormant=${!!c.dormant} hidden=${!!c.hidden} panel=${this.panel.current?.kind || '-'}/${!!this.panel.visible}`);
   }
 
   async startSession(evt) {
