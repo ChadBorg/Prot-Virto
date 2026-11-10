@@ -151,7 +151,7 @@ class Thor {
     // what you asked for, and what can't wait (a dying battery), comes at once and word for word
     if (urgent || !this.aiReady) return show(text);
     // her own words from her AI brain; the written line is the fallback (offline, slow, odd answer)
-    this.aiLine(key, text).then((own) => {
+    this.aiLine(key, text, vars).then((own) => {
       if (!force && !this.free) return; // something more important came up while she thought
       show(own || text);
     });
@@ -168,16 +168,19 @@ class Thor {
 
   // One spontaneous remark from her chat brain, in the spirit of `line` (which keeps the facts:
   // game names, numbers). null when it's off, too slow or not usable: then she says `line`.
-  async aiLine(key, line) {
+  async aiLine(key, line, vars = {}) {
     const id = `quip-${++this.quips}`;
     const started = Date.now();
     const system = this.chat.persona() + '\n' + [
-      'Right now you are not chatting: you make one spontaneous remark out loud, on your own, about what just happened.',
+      'Right now you are not chatting: you make one spontaneous remark out loud, on your own, about ONE thing that just happened.',
+      'React to that thing only. The rest of what you know about their day is background: don\'t narrate it, and never say something is happening unless you are told it is happening now.',
       'Reply with only that remark: at most 25 words, one or two sentences, plain text. No quotes, no tags, no emoji, no markdown.',
     ].join('\n');
-    const user = `The moment (${key}). Your usual line here would be: "${line}"\n` +
-      'Say something in that spirit, in fresh words of your own, reacting to this moment and what you know about them today. ' +
-      'Keep game names and numbers exactly as they are; add no facts you weren\'t given.';
+    // On the Thor, Groq answered the Chrono Trigger launch with "Firing up REDLINE now..." (from the
+    // day's context) and never named the game: the event goes first and plainly, and is checked below.
+    const user = `What just happened (${key.replace(/\./g, ' ')}): ${line}\n` +
+      'That is what you would usually say. Say it again your own way, fresh words, reacting to exactly this. ' +
+      'Mention the same game, app or numbers, unchanged.';
     const timeout = new Promise((resolve) => setTimeout(() => resolve(null), AI_LINE_TIMEOUT));
     let res = null;
     try {
@@ -188,7 +191,13 @@ class Thor {
     } catch (e) {
       res = null;
     }
-    const own = res?.ok ? cleanQuip(res.text) : null;
+    let own = res?.ok ? cleanQuip(res.text) : null;
+    // about the right thing? A game or app named in the moment has to be in her remark
+    const named = vars.game || vars.app;
+    if (own && named && !mentions(own, named)) {
+      console.log(`[thor] ai line ${key}: off topic (no "${named}"): ${own}`);
+      own = null;
+    }
     if (!res) host.chatStop(id); // too slow: don't let it finish in the background
     // the free gateway is sometimes just slow (0.4 s one try, 9 s the next): a short break after a
     // timeout, a longer one after an error
@@ -706,6 +715,19 @@ const ROAM_CHANCE = 0.3;
 // her AI-written remarks: how long she may think before saying her written line instead
 // (Pollinations answers in 0.4-9 s on the Thor; Groq or a local Ollama in well under a second)
 const AI_LINE_TIMEOUT = 7000;
+
+// does `text` name `name`? Exactly, or by any distinctive word of it ("Chrono" for "Chrono Trigger",
+// "Zelda" for "The Legend of Zelda: A Link Between Worlds"), ignoring case and punctuation
+const FILLER = new Set(['edition', 'remastered', 'deluxe', 'definitive', 'collection', 'version', 'remake', 'game',
+  'with', 'from', 'into', 'your', 'this', 'that', 'emulator']);
+export function mentions(text, name) {
+  const norm = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const t = ` ${norm(text)} `;
+  const n = norm(name);
+  if (!n || t.includes(` ${n} `)) return true;
+  const words = n.split(' ').filter((w) => w.length >= 4 && !FILLER.has(w));
+  return words.length === 0 || words.some((w) => t.includes(` ${w}`));
+}
 
 // an AI remark as she'd say it, or null if it isn't one (too long, a refusal, a list...)
 export function cleanQuip(text) {
