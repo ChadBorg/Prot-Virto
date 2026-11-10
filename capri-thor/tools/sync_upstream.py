@@ -133,6 +133,11 @@ def main() -> None:
           '<script src="js/android.js"></script>\n  <script type="module" src="js/app.js"></script>\n'
           '  <script type="module" src="js/thor.js"></script>')
     patch(index, "<html lang=\"fr\">", "<html lang=\"en\">")
+    # Pin page zoom at 1: without a viewport the WebView zoomed the page out (to 75%, laid out 1112 px
+    # wide) after she moved to the Thor's wider top screen, and she was drawn mostly below its edge.
+    patch(index, '<meta charset="utf-8">',
+          '<meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1, '
+          'minimum-scale=1, maximum-scale=1, user-scalable=no">')
     # a touch screen: no hover, no text selection, no callouts on long-press
     patch(OUT / "src/renderer/styles/capri.css", "@font-face {",
           "html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; "
