@@ -75,6 +75,7 @@ class Thor {
       else if (cmd?.name === 'thorBattery') this.batteryCheck();
     });
     this.patchChat();
+    setTimeout(() => this.syncView(), 3000);
     setInterval(() => this.tick(), 30 * 1000);
     host.thor('thorReady');
   }
@@ -526,6 +527,8 @@ class Thor {
     const c = this.capri;
     const w = innerWidth;
     const h = innerHeight;
+    console.log(`[thor] screen ${this.display.current}: inner ${w}x${h} dpr ${devicePixelRatio} screen ${screen.width}x${screen.height} ` +
+      `view ${Math.round(c.view?.w)}x${Math.round(c.view?.h)} floor ${Math.round(c.view?.floor)} feet ${Math.round(c.pos?.x)},${Math.round(c.pos?.y)}`);
     if (!w || !h || !c.view || (Math.abs(c.view.w - w) < 2 && Math.abs(c.view.h - h) < 2)) return;
     console.log(`[thor] view ${Math.round(c.view.w)}x${Math.round(c.view.h)} -> ${w}x${h} (dpr ${devicePixelRatio})`);
     this.fx?.resize?.(w, h);
