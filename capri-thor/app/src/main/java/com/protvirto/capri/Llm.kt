@@ -96,7 +96,9 @@ class Llm(private val config: Config) {
             }
             return if (id == "gemini") names.filter { "gemini" in it && !Regex("embed|tts|image|audio|live|veo|imagen|robotics|aqa").containsMatchIn(it) }
                 .sortedBy { (if (Regex("preview|exp").containsMatchIn(it)) 4 else 0) + (if ("flash" in it) 0 else 2) }
-            else names
+            // only models that can chat: Groq's list starts with speech ones (whisper-large-v3-turbo was picked
+            // on the Thor: "does not support chat completions")
+            else names.filterNot { NOT_CHAT.containsMatchIn(it) }
         }
     }
 
@@ -111,7 +113,10 @@ class Llm(private val config: Config) {
             "openrouter" -> listOf("meta-llama/llama-3.3-70b-instruct:free")
             else -> emptyList()
         }
-        return preferred.firstOrNull { it in models } ?: models.firstOrNull()
+        val chat = models.filterNot { NOT_CHAT.containsMatchIn(it) }
+        // exact favourites first; else by family (exact names get retired), else the first that can chat
+        return preferred.firstOrNull { it in chat }
+            ?: chat.minByOrNull { m -> GOOD_CHAT.indexOfFirst { it.containsMatchIn(m) }.let { if (it < 0) GOOD_CHAT.size else it } }
     }
 
     fun isLocal(): Boolean {
@@ -185,6 +190,19 @@ class Llm(private val config: Config) {
 
     companion object {
         private val JSON = "application/json".toMediaType()
+
+        // models in a provider's list that can't chat: speech-to-text, text-to-speech, moderation, embeddings
+        val NOT_CHAT = Regex("whisper|tts|playai|orpheus|guard|embed|moderation|audio|transcri|speech|image|vision-only|rerank", RegexOption.IGNORE_CASE)
+
+        // good chat models by family, best first (exact names get retired); fast non-reasoning ones lead,
+        // since her remarks have to come in a few seconds (gpt-oss thinks before it answers)
+        val GOOD_CHAT = listOf(
+            Regex("llama-?4-maverick|llama-?3\\.3-70b", RegexOption.IGNORE_CASE),
+            Regex("kimi|llama-?4", RegexOption.IGNORE_CASE),
+            Regex("qwen3?-?32b|70b", RegexOption.IGNORE_CASE),
+            Regex("gpt-oss-120b|deepseek", RegexOption.IGNORE_CASE),
+            Regex("gpt-oss|llama|qwen|gemma|mistral|mixtral", RegexOption.IGNORE_CASE),
+        )
 
         val PROVIDERS = linkedMapOf(
             "pollinations" to Provider("Pollinations (no key)", "https://text.pollinations.ai/openai", modelsUrl = "https://text.pollinations.ai/models"),
