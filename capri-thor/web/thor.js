@@ -253,10 +253,14 @@ class Thor {
     this.day.playMs += ms;
     this.saveDay();
     const min = Math.max(1, Math.round(ms / MIN));
+    const endedAt = Date.now();
     const back = async () => {
       if (s.stowed && this.capri.stowed) await this.capri.unstow();
       if (s.moved != null) host.thor('goScreen', s.moved);
       await sleep(900);
+      // straight into another game: its launch line beats a roast about the last one (which landed
+      // a second later and covered it)
+      if ((this.launched && this.launched.at >= endedAt) || this.session) return;
       // a peek at REDLINE's menus isn't "quitting a game": no roast, she just comes back
       if (s.kind === 'redline' && ms < 3 * MIN) return;
       if (ms < 3 * MIN) {
