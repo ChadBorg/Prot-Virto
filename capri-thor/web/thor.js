@@ -56,6 +56,8 @@ class Thor {
     this.hops = [];         // short sessions lately (commitment issues)
     this.day = this.loadDay();
     this.quietUntil = 0;
+    this.quips = 0;         // AI-written remarks asked for (ids)
+    this.aiDownUntil = 0;   // after a failed AI remark: written lines only until then
     this.cfg = {};
     this.batt = null;       // { pct, charging, samples: [[t, pct]], warned: [], full, nagAt }
     this.shakes = [];
@@ -138,10 +140,53 @@ class Thor {
     const text = this.line(key, vars);
     if (!text) return false;
     this.said[key] = now;
-    this.capri.wake();
-    const shown = this.panel.say({ kind: 'info', face, line: text, hold, ...(actions && { actions, onAction }) });
-    if (shown !== false && act && this.capri.free) this.capri.perform(act);
-    return shown !== false;
+    const show = (line) => {
+      this.capri.wake();
+      const shown = this.panel.say({ kind: 'info', face, line, hold, ...(actions && { actions, onAction }) });
+      if (shown !== false && act && this.capri.free) this.capri.perform(act);
+      return shown !== false;
+    };
+    // what you asked for, and what can't wait (a dying battery), comes at once and word for word
+    if (urgent || !this.aiReady) return show(text);
+    // her own words from her AI brain; the written line is the fallback (offline, slow, odd answer)
+    this.aiLine(key, text).then((own) => {
+      if (!force && !this.free) return; // something more important came up while she thought
+      show(own || text);
+    });
+    return true;
+  }
+
+  get aiReady() {
+    return this.cfg.aiLines !== false && Date.now() > this.aiDownUntil && !this.chat.open;
+  }
+
+  // One spontaneous remark from her chat brain, in the spirit of `line` (which keeps the facts:
+  // game names, numbers). null when it's off, too slow or not usable: then she says `line`.
+  async aiLine(key, line) {
+    const id = `quip-${++this.quips}`;
+    const started = Date.now();
+    const system = this.chat.persona() + '\n' + [
+      'Right now you are not chatting: you make one spontaneous remark out loud, on your own, about what just happened.',
+      'Reply with only that remark: at most 25 words, one or two sentences, plain text. No quotes, no tags, no emoji, no markdown.',
+    ].join('\n');
+    const user = `The moment (${key}). Your usual line here would be: "${line}"\n` +
+      'Say something in that spirit, in fresh words of your own, reacting to this moment and what you know about them today. ' +
+      'Keep game names and numbers exactly as they are; add no facts you weren\'t given.';
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(null), AI_LINE_TIMEOUT));
+    let res = null;
+    try {
+      res = await Promise.race([
+        host.chatSend({ id, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+        timeout,
+      ]);
+    } catch (e) {
+      res = null;
+    }
+    const own = res?.ok ? cleanQuip(res.text) : null;
+    if (!res) host.chatStop(id); // too slow: don't let it finish in the background
+    if (!res || !res.ok) this.aiDownUntil = Date.now() + 5 * MIN;
+    console.log(`[thor] ai line ${key}: ${own ? 'own' : res ? (res.ok ? 'unusable' : `error ${res.error}`) : 'timeout'} in ${Date.now() - started} ms`);
+    return own;
   }
 
   // ---- events --------------------------------------------------------------------------------
@@ -599,6 +644,25 @@ const SYSTEMS = {
   gamegear: 'Game Gear', arcade: 'Arcade', mame: 'MAME', fbneo: 'FinalBurn Neo', neogeo: 'Neo Geo', pcengine: 'PC Engine',
   atari2600: 'Atari 2600', windows: 'PC', steam: 'Steam', android: 'Android', segacd: 'Sega CD', sega32x: '32X', xbox: 'Xbox',
 };
+// her AI-written remarks: how long she may think before saying her written line instead
+const AI_LINE_TIMEOUT = 4500;
+
+// an AI remark as she'd say it, or null if it isn't one (too long, a refusal, a list...)
+export function cleanQuip(text) {
+  if (!text) return null;
+  let s = String(text)
+    .replace(/\[\[[^\]]*\]\]/g, '')        // her chat's action tags
+    .replace(/[*_`#>]/g, '')               // markdown
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^capri\s*:\s*/i, '')
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+    .trim();
+  if (s.length < 4 || s.length > 220) return null;
+  if (/\b(as an ai|language model|i can(?:'|no)t help|i'm sorry, but)\b/i.test(s)) return null;
+  return s;
+}
+
 export function prettySystem(s) {
   return SYSTEMS[s] || (s ? s.toUpperCase() : 'that system');
 }

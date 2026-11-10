@@ -28,7 +28,7 @@ class Config(context: Context) {
 
           "startOnBoot": true, "screen": "bottom", "esdePath": "/storage/emulated/0/ES-DE",
           "ollamaUrl": "http://127.0.0.1:11434", "running": true,
-          "sass": "normal", "quietHours": false, "batteryWarn": true, "shake": true
+          "sass": "normal", "quietHours": false, "batteryWarn": true, "shake": true, "aiLines": true
         }
         """.trimIndent()
     )
