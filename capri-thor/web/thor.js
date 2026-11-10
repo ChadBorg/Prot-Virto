@@ -184,7 +184,10 @@ class Thor {
     }
     const own = res?.ok ? cleanQuip(res.text) : null;
     if (!res) host.chatStop(id); // too slow: don't let it finish in the background
-    if (!res || !res.ok) this.aiDownUntil = Date.now() + 5 * MIN;
+    // the free gateway is sometimes just slow (0.4 s one try, 9 s the next): a short break after a
+    // timeout, a longer one after an error
+    if (!res) this.aiDownUntil = Date.now() + MIN;
+    else if (!res.ok) this.aiDownUntil = Date.now() + 5 * MIN;
     console.log(`[thor] ai line ${key}: ${own ? 'own' : res ? (res.ok ? 'unusable' : `error ${res.error}`) : 'timeout'} in ${Date.now() - started} ms`);
     return own;
   }
@@ -645,7 +648,8 @@ const SYSTEMS = {
   atari2600: 'Atari 2600', windows: 'PC', steam: 'Steam', android: 'Android', segacd: 'Sega CD', sega32x: '32X', xbox: 'Xbox',
 };
 // her AI-written remarks: how long she may think before saying her written line instead
-const AI_LINE_TIMEOUT = 4500;
+// (Pollinations answers in 0.4-9 s on the Thor; Groq or a local Ollama in well under a second)
+const AI_LINE_TIMEOUT = 7000;
 
 // an AI remark as she'd say it, or null if it isn't one (too long, a refusal, a list...)
 export function cleanQuip(text) {
