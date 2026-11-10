@@ -156,8 +156,12 @@ class Thor {
     return true;
   }
 
+  // Needs a real brain: the keyless Pollinations gateway took 0.3-20 s on the Thor, answered 429 (too
+  // many requests) after two calls and repeated itself, and her chat shares its allowance. With a key
+  // (Groq, Gemini...) or Ollama, she writes her own remarks.
   get aiReady() {
-    return this.cfg.aiLines !== false && Date.now() > this.aiDownUntil && !this.chat.open;
+    const provider = this.cfg.provider || 'pollinations';
+    return this.cfg.aiLines !== false && provider !== 'pollinations' && Date.now() > this.aiDownUntil && !this.chat.open;
   }
 
   // One spontaneous remark from her chat brain, in the spirit of `line` (which keeps the facts:

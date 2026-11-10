@@ -214,7 +214,7 @@ class MainActivity : ComponentActivity() {
                 Check("Quiet hours (23:00–08:00)", "No commentary at night — only what you ask for and a dying battery", cfg.optBoolean("quietHours", false), font) {
                     save(JSONObject().put("quietHours", it))
                 }
-                Check("AI-written comments", "She makes up her own remarks (launches, quits, scrolling…) with her AI brain. Off, or offline: her written lines.", cfg.optBoolean("aiLines", true), font) {
+                Check("AI-written comments", "She makes up her own remarks (launches, quits, scrolling…) with her AI brain. Needs a key (Groq is free and fast) or Ollama below; without one, or offline: her written lines.", cfg.optBoolean("aiLines", true), font) {
                     save(JSONObject().put("aiLines", it))
                 }
                 Check("Battery warnings", "30%, 20%, 15%… and a nag every so often under 15%. A notification if she's put away mid-game.", cfg.optBoolean("batteryWarn", true), font) {
