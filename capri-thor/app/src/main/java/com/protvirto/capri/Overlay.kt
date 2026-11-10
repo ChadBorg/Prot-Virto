@@ -146,12 +146,15 @@ class Overlay(private val service: CapriService, private val bridge: Bridge) {
     // ---- screens ----------------------------------------------------------------------------------
     /** Her window's size in CSS pixels. */
     fun cssSize(): Pair<Int, Int> {
-        val m = service.createDisplayContext(display).resources.displayMetrics
-        val bounds = wm?.maximumWindowMetrics?.bounds
+        // all from the screen she's on, like screens(): mixing this screen's bounds with the density of
+        // the WebView's first screen gave her the wrong size after a move (on the Thor's top screen she
+        // stood ~250 px below its bottom edge and couldn't cross back)
+        val ctx = service.createDisplayContext(display)
+        val m = ctx.resources.displayMetrics
+        val bounds = ctx.getSystemService(WindowManager::class.java)?.maximumWindowMetrics?.bounds
         val w = bounds?.width() ?: m.widthPixels
         val h = bounds?.height() ?: m.heightPixels
-        val dpr = web?.let { it.resources.displayMetrics.density } ?: m.density
-        return Pair((w / dpr).toInt(), (h / dpr).toInt())
+        return Pair((w / m.density).toInt(), (h / m.density).toInt())
     }
 
     fun screens(): JSONObject {

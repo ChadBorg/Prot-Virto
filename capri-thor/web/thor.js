@@ -210,6 +210,8 @@ class Thor {
       case 'thermal': return this.onThermal(evt);
       case 'display':
         this.display = { ...this.display, ...evt };
+        // after a screen change her view must be the WebView's real size (what she's drawn in)
+        for (const ms of [400, 1500]) setTimeout(() => this.syncView(), ms);
         // safety net after a screen change: never left standing outside the screen
         setTimeout(() => {
           const c = this.capri;
@@ -519,6 +521,18 @@ class Thor {
   }
 
   // ---- the procrastination engine ------------------------------------------------------------
+  // Her view = the WebView's real size, like app.js's resize handler does (no floor gap on Android).
+  syncView() {
+    const c = this.capri;
+    const w = innerWidth;
+    const h = innerHeight;
+    if (!w || !h || !c.view || (Math.abs(c.view.w - w) < 2 && Math.abs(c.view.h - h) < 2)) return;
+    console.log(`[thor] view ${Math.round(c.view.w)}x${Math.round(c.view.h)} -> ${w}x${h} (dpr ${devicePixelRatio})`);
+    this.fx?.resize?.(w, h);
+    this.chip?.place?.(w, h);
+    c.setView(w, h, h);
+  }
+
   // Now and then, with nothing going on, she leaps over to the other screen through their shared
   // edge (Overlay.kt lays them side by side for that). Never during a game or a stream (the dodge
   // keeps her off your game's screen), nor over a video, nor when wandering is off in her menu.
